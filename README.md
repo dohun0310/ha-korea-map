@@ -8,6 +8,12 @@ ha-korea-map은 Home Assistant(HA) 기본 지도(`/map`)에서 배경 지도를 
 
 별도 패널을 만들지 않고 HA 기본 지도 대시보드를 그대로 사용합니다. 사람, 구역, 경로 마커도 그대로 표시됩니다.
 
+## 화면 예시
+
+![테스트용 HA 기본 지도에서 Google 지도를 표시한 화면](docs/images/google-map-lab.svg)
+
+격리된 테스트 환경에서 Google 지도를 표시한 실제 화면입니다. 계정 사이드바는 제외했으며, Google 로고와 저작권 표시는 그대로 남겼습니다. 이 이미지는 Google 지도 표시 예시이며, NAVER 커스텀 스타일 렌더링이나 HACS를 통한 실제 설치를 검증한 화면은 아닙니다.
+
 ## 주요 기능
 
 - NAVER Maps JavaScript API v3와 Google Maps JavaScript API를 공식 SDK로만 불러옵니다. 비공식 타일 주소는 사용하지 않습니다.
@@ -74,3 +80,7 @@ OPENBLAS_NUM_THREADS=1 prlimit --as=2500000000 -- .venv/bin/python tools/build_k
 ## 데이터 출처
 
 경계 데이터는 geoBoundaries와 Natural Earth 데이터를 가공해 만들었습니다. 북한 데이터(CC BY 3.0 IGO)와 일본 데이터(CC BY 4.0)는 출처를 표기해야 합니다. 표기 문구는 [dist/ATTRIBUTION.md](dist/ATTRIBUTION.md)에 있습니다.
+
+## 라이선스
+
+이 저장소의 코드에는 [MIT 라이선스](LICENSE)를 적용합니다. 경계 데이터에는 각 데이터셋의 별도 라이선스가 적용되며, 기존 출처와 라이선스 표기는 [dist/ATTRIBUTION.md](dist/ATTRIBUTION.md)에 유지합니다. 코드의 MIT 라이선스는 지도 SDK나 지도 이미지에 적용되는 제공자의 이용 조건을 대체하지 않습니다.
