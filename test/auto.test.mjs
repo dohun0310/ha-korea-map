@@ -364,6 +364,21 @@ test("diagnostics expose auto decision and reason but no coordinates or keys", a
   assert.doesNotMatch(text, /37\.5|126\.9|key/i);
   r.destroy();
 });
+test("loadBoundary rejects malformed nested polygon coordinates before auto starts", async () => {
+  const { loadBoundary } = await import("../config/www/ha-map-auto.mjs");
+  const invalid = [
+    { type: "Polygon", coordinates: [[]] },
+    { type: "MultiPolygon", coordinates: [[]] },
+    { type: "Polygon", coordinates: [[[0, 0], [1, 1], [2, 2], [null, 0]]] },
+    { type: "Polygon", coordinates: [[[0, 0], [1, 1], [2, 2], [181, 0]]] },
+  ];
+  for (const [i, geometry] of invalid.entries()) {
+    await assert.rejects(loadBoundary(`/invalid-nested-${i}.geojson`, {
+      fetch: async () => ({ ok: true, json: async () => geometry }),
+    }), /boundary-invalid/);
+  }
+});
+
 test("loadBoundary validates GeoJSON and caches per URL", async () => {
   const { loadBoundary } = await import("../config/www/ha-map-auto.mjs");
   let calls = 0;

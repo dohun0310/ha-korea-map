@@ -46,6 +46,16 @@ function validGeometry(fc) {
     !g.coordinates.length
   )
     throw new Error("boundary-invalid");
+  const polygons = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+  if (!polygons.every((polygon) =>
+    Array.isArray(polygon) && polygon.length > 0 && polygon.every((ring) =>
+      Array.isArray(ring) && ring.length >= 4 && ring.every((point) =>
+        Array.isArray(point) && point.length >= 2 &&
+        Number.isFinite(point[0]) && Math.abs(point[0]) <= 180 &&
+        Number.isFinite(point[1]) && Math.abs(point[1]) <= 90,
+      ),
+    ),
+  )) throw new Error("boundary-invalid");
   return g;
 }
 export function loadBoundary(url, { fetch = globalThis.fetch, timeout = 10000 } = {}) {
