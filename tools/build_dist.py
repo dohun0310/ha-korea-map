@@ -17,6 +17,7 @@ FILES = [
     'ha-map-extension.mjs',
     'ha-map-router.mjs',
     'ha-map-sdk.mjs',
+    'ha-map-cluster.mjs',
     'ha-map-auto.mjs',
     'ha-map-korea-boundary.geojson',
 ]

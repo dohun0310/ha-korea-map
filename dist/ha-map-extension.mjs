@@ -1,7 +1,7 @@
 // Pinned private HA integration; official SDKs are only loaded with key + opt-in.
-import { MapRouter } from "./ha-map-router.mjs?v=auto-4";
-import { SDKEngine } from "./ha-map-sdk.mjs?v=auto-4";
-import { AutoSwitch, loadBoundary } from "./ha-map-auto.mjs?v=auto-4";
+import { MapRouter } from "./ha-map-router.mjs?v=auto-5";
+import { SDKEngine } from "./ha-map-sdk.mjs?v=auto-5";
+import { AutoSwitch, loadBoundary } from "./ha-map-auto.mjs?v=auto-5";
 const installed = new WeakMap();
 export function ownsDefaultPanel(map, path = globalThis.location?.pathname) {
   if (path !== "/map" && path !== "/map/0") return false;

@@ -5,10 +5,10 @@
 // OUTSIDE the package folder (/config/www/ha-korea-map-config.mjs -> /local/...) so a HACS
 // update, which replaces the package folder, never overwrites it.
 // Unknown HA/frontend versions fail closed: the original HA map stays untouched.
-import { startAutoHook } from "./ha-map-extension.mjs?v=auto-4";
+import { startAutoHook } from "./ha-map-extension.mjs?v=auto-5";
 
 export const CONFIG_PATH = "/local/ha-korea-map-config.mjs";
-export const BOUNDARY_FILE = "./ha-map-korea-boundary.geojson?v=auto-4";
+export const BOUNDARY_FILE = "./ha-map-korea-boundary.geojson?v=auto-5";
 
 export function packageUrls(moduleUrl) {
   return {

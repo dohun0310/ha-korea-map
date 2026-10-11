@@ -2,6 +2,7 @@
 import hashlib
 import json
 import pathlib
+import re
 import subprocess
 import sys
 import unittest
@@ -9,7 +10,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DIST = ROOT / 'dist'
 FILES = ['ha-korea-map.js', 'ha-map-extension.mjs', 'ha-map-router.mjs', 'ha-map-sdk.mjs',
-         'ha-map-auto.mjs', 'ha-map-korea-boundary.geojson']
+         'ha-map-cluster.mjs', 'ha-map-auto.mjs', 'ha-map-korea-boundary.geojson']
 
 
 class DistTests(unittest.TestCase):
@@ -37,7 +38,7 @@ class DistTests(unittest.TestCase):
     def test_entry_reads_config_outside_package_and_pins_versions(self):
         text = (DIST / 'ha-korea-map.js').read_text()
         self.assertIn('"/local/ha-korea-map-config.mjs"', text)
-        self.assertIn('./ha-map-extension.mjs?v=auto-4', text)
+        self.assertIn('./ha-map-extension.mjs?v=auto-5', text)
         self.assertNotIn('lab-config', text)
 
     def test_no_keys_or_generated_config_in_package(self):
@@ -45,6 +46,23 @@ class DistTests(unittest.TestCase):
             self.assertNotIn('config', path.name)
             text = path.read_text(errors='ignore')
             self.assertNotRegex(text, r'AIza[0-9A-Za-z_-]{20,}', path.name)
+
+    def test_complete_package_and_uniform_cache_version(self):
+        self.assertEqual({p.name for p in DIST.iterdir()}, set(FILES) | {'ATTRIBUTION.md', 'SHA256SUMS'})
+        versions = set()
+        for name in FILES:
+            if not name.endswith(('.js', '.mjs')):
+                continue
+            text = (DIST / name).read_text()
+            versions.update(re.findall(r'\?v=(auto-\d+)', text))
+            self.assertNotRegex(text, r'\.style\.filter\s*=')
+            for spec in re.findall(r'(?:import|from)\s*\(?\s*"(\./[^"]+)"', text):
+                target, sep, query = spec[2:].partition('?')
+                self.assertIn(target, FILES)
+                self.assertEqual(query, 'v=auto-5')
+        self.assertEqual(versions, {'auto-5'})
+        bootstrap = (ROOT / 'config/www/ha-map-lab-bootstrap.mjs').read_text()
+        self.assertEqual(set(re.findall(r'\?v=(auto-\d+)', bootstrap)), versions)
 
     def test_checksums_and_install_guide(self):
         sums = (DIST / 'SHA256SUMS').read_text()
@@ -54,7 +72,7 @@ class DistTests(unittest.TestCase):
         self.assertTrue((DIST / 'ATTRIBUTION.md').exists())
         guide = (ROOT / 'docs' / 'INSTALL.md').read_text()
         for needle in ['HACS', '/hacsfiles/ha-korea-map/ha-korea-map.js', 'extra_module_url',
-                       '/local/ha-korea-map/ha-korea-map.js?v=auto-4', '/config/www/ha-korea-map-config.mjs',
+                       '/local/ha-korea-map/ha-korea-map.js?v=auto-5', '/config/www/ha-korea-map-config.mjs',
                        'HTTP 리퍼러', '3.2.3(e)', 'CC BY 3.0 IGO', 'CC BY 4.0', '롤백', 'pin', '캐시', '--provider auto']:
             self.assertIn(needle, guide)
 

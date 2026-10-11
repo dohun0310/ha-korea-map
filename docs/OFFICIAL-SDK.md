@@ -7,6 +7,7 @@
 - `ha-map-extension.mjs`: `ha-map` 요소의 비공개 메서드인 `_createEngine`을 감쌉니다. `/map` 대시보드에 있는 지도 카드에서만 라우터를 반환하고, 다른 화면에서는 HA 원래 엔진을 그대로 반환합니다.
 - `ha-map-router.mjs`: HA가 보기에는 하나의 MapEngine처럼 동작합니다. 마커, 원, 경로를 기록해 두었다가 엔진을 바꿀 때 새 엔진에 다시 그립니다.
 - `ha-map-sdk.mjs`: 실제 `naver.maps.Map`, `google.maps.Map`과 각 SDK의 `OverlayView`, `Circle`, `Polyline`을 만드는 어댑터입니다.
+- `ha-map-cluster.mjs`: SDK가 제공하는 화면 좌표로 마커를 묶고 HA가 만든 그룹 아이콘을 표시합니다.
 - `ha-map-auto.mjs`: 지도 중심이 대한민국 경계 안에 있는지 판정해 NAVER 지도와 Google 지도를 자동으로 고릅니다.
 - `ha-korea-map.js`: 운영 환경에서 사용하는 진입 모듈입니다. 키 설정 파일을 읽고 확장을 설치합니다.
 
@@ -43,18 +44,28 @@ python3 generate-provider-config.py --provider auto --opt-in \
 
 ## 그룹화(클러스터링)
 
-지도 카드는 `cluster` 설정을 읽으며 기본값은 true입니다(Frontend 20260930.3 `hui-map-card.ts`: `this._config.cluster ?? true`). 라우터는 HA가 넘기는 `setClustering` 값을 저장해 현재 엔진에 전달하고, 엔진을 바꿀 때 같은 값을 다시 적용합니다. 그룹화 버튼을 눌러도 안전 모드로 바뀌지 않고 제공자 지도를 유지합니다. 현재 SDK 엔진은 그룹 아이콘을 그리지 않고 마커를 하나씩 표시합니다. 상태는 `haMapExtension.diagnostics().routers[0]`에 있는 `clustering`과 `clusterRendering` 값으로 확인합니다.
+지도 카드는 `cluster` 설정을 읽으며 기본값은 true입니다(Frontend 20260930.3 `hui-map-card.ts`: `this._config.cluster ?? true`). 라우터는 HA가 넘기는 `setClustering` 값을 저장해 현재 엔진에 전달하고, 엔진을 바꿀 때 같은 값을 다시 적용합니다. 그룹화 버튼을 눌러도 안전 모드로 바뀌지 않고 제공자 지도를 유지합니다. 상태는 `haMapExtension.diagnostics().routers[0]`에 있는 `clustering`과 `clusterRendering` 값으로 확인하며, 제공자 지도에서 그룹화가 켜져 있으면 `clusterRendering`은 `grouped`입니다.
+
+SDK 엔진은 외부 클러스터 라이브러리를 불러오지 않고 `ha-map-cluster.mjs`에서 직접 그룹을 계산합니다. 규칙은 HA MapLibre 엔진(`maplibre-map-engine.ts`의 `_rebuildClusters`, `_groupMarkers`, `_prepareGroup`, `_mergeOverlappingBubbles`)을 따릅니다.
+
+- `cluster: true`로 추가된 마커만 그룹 대상이며, 이 마커는 다음 `setClustering` 호출 때 나타납니다. HA는 선택된 마커를 그룹에서 제외합니다.
+- 같은 `groupKey`(구역)를 가진 마커는 화면에서 `groupRadius`(HA 값 160px) 안에 모여 있으면 한 그룹이 됩니다. 나머지 마커는 `radius`(HA 값 40px) 안에 있는 그룹에 합쳐집니다. 화면 거리는 SDK가 제공하는 투영(`fromCoordToOffset`, `fromLatLngToDivPixel`)으로 계산합니다.
+- 두 개 이상이 모인 그룹과 구역 그룹은 HA의 `iconBuilder`가 만든 아이콘(아바타 말풍선과 숫자)을 표시합니다. 혼자 있는 마커는 그대로 표시합니다. 아이콘끼리 겹치면 하나로 합칩니다.
+- 최대 줌에서는 모든 아이콘을 펼친(expanded) 모양으로 표시합니다. 아이콘을 누르거나 Enter, Space 키를 누르면 구성원이 모두 보이도록 확대하고(pad 0.3, 최대 줌까지), 더 확대해도 나뉘지 않는 그룹이면 펼친 모양으로 엽니다.
+- 그룹은 카메라가 새 줌에서 멈춘 뒤(`idle`, 120ms 지연)에 다시 계산합니다. 같은 줌에서 이동만 했을 때는 다시 계산하지 않습니다.
+- HA가 넘긴 마커 요소는 그룹에 들어가는 동안 감싸는 요소를 `display: none`으로 숨기기만 하고 제거하지 않습니다. 그룹화를 끄면 같은 요소를 다시 표시합니다.
+- 최대 줌은 NAVER의 `getMaxZoom()` 값을 사용합니다. Google에는 해당 메서드가 없으므로 `maxZoom` 옵션이 없으면 21로 가정합니다.
+- HA MapLibre 엔진에 있는 기능 가운데 확대 중에 그룹이 서서히 갈라지는 효과와, 애니메이션 도중 목적지 줌을 기준으로 미리 다시 묶는 동작은 구현하지 않았습니다.
 
 ## 지도 스타일(다크 모드)
 
 HA는 지도 카드의 `theme_mode`와 HA 테마의 다크 모드 설정으로 스타일을 정하고, 엔진의 `setMapStyle`로 결과를 전달합니다(`ha-map.ts`의 `_darkMode`, `_updateMapAppearance`). 전달되는 값은 팔레트 이름을 담고 있으며, 다크 모드일 때는 이름이 `-dark`로 끝납니다(`map-styles.ts`의 `paletteFor`). 확장은 이 규칙으로 다크 모드를 판단합니다.
 
-- Google: 지도를 만들 때 `colorScheme`을 `DARK` 또는 `LIGHT`로 지정합니다. Google 문서는 이 옵션을 지도를 만들 때만 지정할 수 있다고 설명합니다. 그래서 테마가 바뀌면 엔진이 라우터에 지도를 다시 만들어 달라고 요청하고, 라우터는 같은 제공자의 새 엔진을 만들어 오버레이를 다시 그린 다음 이전 엔진을 제거합니다. Map ID가 필요하지 않습니다. JSON `styles` 배열도 Map ID 없이 실행 중에 바꿀 수 있지만, Google이 제공하는 다크 디자인이 아니라 직접 색을 정의해야 하므로 사용하지 않았습니다.
-- NAVER: 공식 문서에서 찾은 스타일 지정 방법은 Style Editor에서 발행한 스타일 ID를 `customStyleId`로 지정하는 방법뿐이며, 이 방법은 GL 서브 모듈(`submodules=gl`)과 콘솔 작업이 필요합니다. 그래서 기본 동작으로는 HA가 자체 래스터 지도에 사용하는 필터(`invert(0.9) hue-rotate(170deg) brightness(1.5) contrast(1.2) saturate(0.3)`)를 타일 층에만 적용합니다.
-  - 타일 층은 NAVER가 문서로 공개한 오버레이 pane(`getPanes()`)과 같은 부모 아래에 있는 형제 요소로 찾습니다. 링크나 글자를 포함한 요소는 제외합니다. 이 DOM 구조는 NAVER가 문서로 보장하는 내용이 아니므로, 실제 화면에서 로고와 저작권 표시가 변형되지 않았는지 확인해야 합니다.
-  - 마커, 원, 경로가 있는 pane과 로고, 축척, 저작권 표시에는 필터를 적용하지 않습니다.
-  - 이 필터는 공식 스타일이 아닙니다. NAVER 약관이 타일의 색 변형을 허용하는지는 확인하지 못했습니다.
-  - `generate-provider-config.py`에 `--naver-style-light`, `--naver-style-dark`를 지정하면 필터 대신 공식 스타일을 사용합니다. 이 경로는 실제 키와 스타일 ID로 검증하지 않았습니다.
+- Google: 지도를 만들 때 `colorScheme`을 `DARK` 또는 `LIGHT`로 지정합니다. Google 문서는 이 옵션을 지도를 만들 때만 지정할 수 있다고 설명합니다. 그래서 테마가 바뀌면 엔진이 라우터에 지도를 다시 만들어 달라고 요청하고, 라우터는 같은 제공자의 새 엔진이 준비되면 이전 엔진을 제거하고 오버레이를 다시 그립니다. Map ID가 필요하지 않습니다. JSON `styles` 배열도 Map ID 없이 실행 중에 바꿀 수 있지만, Google이 제공하는 다크 디자인이 아니라 직접 색을 정의해야 하므로 사용하지 않았습니다.
+- NAVER: Style Editor에서 발행한 스타일 ID를 공식 GL 지도 옵션인 `customStyleId`로 지정합니다. SDK 로더는 ID가 하나라도 설정되어 있으면 `submodules=gl`을 요청하고, 현재 모드에 ID가 있으면 지도에 `gl: true`와 그 ID를 전달합니다.
+  - `generate-provider-config.py`에 `--naver-style-light <ID>`, `--naver-style-dark <ID>`를 지정합니다. 해당 모드의 ID가 없으면 NAVER 기본 지도를 사용합니다.
+  - CSS 필터는 사용하지 않습니다. 마커, 원, 경로, 로고, 저작권 표시도 색 변형 없이 유지합니다.
+  - 스타일 ID가 설정된 상태에서 테마를 바꾸면 같은 제공자의 지도를 다시 만들고 오버레이와 그룹화 설정을 적용합니다. 단위 테스트는 옵션 전달을 검증하지만 실제 스타일 발행과 인증 성공까지 증명하지는 않습니다.
 
 ## 실제 화면 검증 기록
 
@@ -88,6 +99,53 @@ await window.haMapExtension.resume("naver"); // 키와 opt-in이 설정된 제�
 - 화면을 벗어날 때 DOM이 정리되는지 확인합니다.
 
 SDK의 `tilesloaded` 이벤트가 발생했다는 사실만으로 인증이나 지도 내용이 올바르다고 판단하지 않습니다.
+
+### 그룹화와 테마 확인
+
+테스트용 HA에서만 다음 코드를 실행합니다. DOM을 따라 `ha-map`을 찾은 뒤 현재 라우터를 사용하며, 인증 정보나 제공자 설정 객체는 출력하지 않습니다.
+
+```js
+function findMap(root = document) {
+  for (const el of root.querySelectorAll("*")) {
+    if (el.localName === "ha-map" && el._engine?.settings) return el;
+    const found = el.shadowRoot && findMap(el.shadowRoot);
+    if (found) return found;
+  }
+}
+const router = findMap()?._engine;
+if (!router) throw new Error("활성 지도 라우터를 찾지 못했습니다.");
+haMapExtension.setView([37.5, 127], 12);
+const previous = router.settings.clustering;
+const samples = [0, 1, 2].map((i) => {
+  const el = document.createElement("button");
+  el.textContent = `합성 ${i + 1}`;
+  return router.addMarker(el, [37.5 + i * 0.00001, 127 + i * 0.00001], {
+    size: [48, 48], cluster: true, title: `합성 ${i + 1}`,
+  });
+});
+router.setClustering({
+  radius: 40,
+  iconBuilder: (members, center, key, expanded) => {
+    const element = document.createElement("div");
+    element.textContent = expanded ? `${members.length}개 펼침` : `${members.length}개`;
+    Object.assign(element.style, {
+      background: "var(--primary-color)", color: "var(--text-primary-color)",
+      borderRadius: "12px", padding: "4px", boxSizing: "border-box",
+    });
+    return { element, size: [80, 40] };
+  },
+});
+window.cleanupMapSamples = () => {
+  samples.forEach((h) => h.remove());
+  router.setClustering(previous);
+};
+haMapExtension.diagnostics();
+// 검증이 끝나면 cleanupMapSamples()를 실행합니다.
+```
+
+이 코드는 실제 사람 위치를 만들거나 HA 상태를 바꾸지 않습니다. 다만 화면에 이미 있는 마커도 임시 아이콘 생성기를 사용하므로, 검증한 뒤 반드시 정리하거나 새로고침합니다. `router.setClustering(null)`을 실행하면 같은 제공자를 유지하면서 마커가 하나씩 나타나야 합니다. 다시 위의 그룹 설정을 적용하거나 HA 그룹화 버튼을 누르면 그룹 아이콘이 나타나야 합니다. 그룹 아이콘을 누르거나 Enter, Space 키를 누르면 확대 또는 펼침이 동작해야 합니다. HA가 만든 아바타 말풍선은 임시 설정을 정리한 뒤 그룹화 버튼으로 따로 확인합니다.
+
+NAVER 공식 스타일은 HA 테마를 라이트와 다크로 각각 바꾼 뒤 `router.current.engine.map.getOptions("customStyleId")`가 해당 모드에 발행한 ID인지 확인합니다. `router.current.engine.map.getOptions("gl")`도 true여야 합니다. 제공자 설정 객체나 SDK 요청 URL 전체에는 키가 들어 있으므로 출력하지 않습니다. Network 탭에서는 GL 서브 모듈과 스타일 요청이 성공하는지만 확인하고, 실제 화면에서 배경 색상, 도로, 지명, 로고와 저작권 표시를 확인합니다. `haMapExtension.diagnostics()`에서는 전환 후 `pending: 0`, `safeMode: false`, 같은 제공자가 유지되는지 확인합니다. 이 확인 방법은 실제 SDK 브라우저 검증을 대신한 완료 기록이 아닙니다.
 
 ## 실패 처리
 
