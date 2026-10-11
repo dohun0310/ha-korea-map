@@ -28,3 +28,27 @@ class GeneratorTests(unittest.TestCase):
    p=subprocess.run(['python3',str(script),'--keys',str(keys),'--output',str(out),'--provider','auto'],capture_output=True,text=True)
    self.assertNotEqual(p.returncode,0);self.assertIn('explicit-opt-in-required',p.stderr)
 if __name__=='__main__':unittest.main()
+
+
+class StyleIdTests(unittest.TestCase):
+    def test_optional_naver_style_ids_are_validated_and_emitted(self):
+        script = ROOT / 'generate-provider-config.py'
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as d:
+            d = pathlib.Path(d)
+            keys = d / 'provider-keys.env'
+            out = d / 'config.mjs'
+            keys.write_text('NAVER_MAP_KEY_ID=unit_public_naver\n')
+            keys.chmod(0o600)
+            base = ['python3', str(script), '--keys', str(keys), '--output', str(out), '--provider', 'naver', '--opt-in']
+            p = subprocess.run(base + ['--naver-style-dark', 'unit-dark-style'], capture_output=True, text=True)
+            self.assertEqual(p.returncode, 0, p.stderr)
+            text = out.read_text()
+            cfg = json.loads(text[text.index('(') + 1:text.rindex(')')])
+            self.assertEqual(cfg['providers']['naver']['styleIds'], {'dark': 'unit-dark-style'})
+            p = subprocess.run(base + ['--naver-style-dark', 'bad id;'], capture_output=True, text=True)
+            self.assertNotEqual(p.returncode, 0)
+            self.assertIn('invalid-style-id', p.stderr)
+            p = subprocess.run(base, capture_output=True, text=True)
+            text = out.read_text()
+            cfg = json.loads(text[text.index('(') + 1:text.rindex(')')])
+            self.assertNotIn('styleIds', cfg['providers']['naver'])

@@ -97,11 +97,13 @@ export function installHook(
           }
           return original.call(target);
         },
-        providerFactory: (name, onFailure) =>
+        providerFactory: (name, onFailure, onRestyle) =>
           new SDKEngine(name, {
             key: providers[name]?.key,
             optIn: providers[name]?.optIn === true,
+            styleIds: providers[name]?.styleIds,
             onFailure,
+            onRestyle,
           }),
         onDestroy: () => routers.delete(router),
       });

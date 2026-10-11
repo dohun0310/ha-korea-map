@@ -1,8 +1,8 @@
 f51564fb532f8512cd925ced20a9b379b4b381871ca4e1c353f65b87017e07c7  ha-korea-map/ATTRIBUTION.md
 bfb743bf795c8f9f95a0f391673d9dceed3df57ccadc9fb9a13a36f170b0afea  ha-korea-map/ha-korea-map.js
 8c0d4de1826b4ec4859f695f07dc4116ecc4e5191fbaf1524b10b7961b676d37  ha-korea-map/ha-map-auto.mjs
-34dd0c5aff74a8c7eaf6fd86f8464adb60ea7fdb5b4f6eff34b8ff22c6c7317c  ha-korea-map/ha-map-extension.mjs
+f0d3be5e034f24de4cfaacd335617f6a9cbf90fe576ad41b751cd10090241eaf  ha-korea-map/ha-map-extension.mjs
 c5722ec0a81f833792a76b68ef699be2d1315081df66b395de1e49707f2cc779  ha-korea-map/ha-map-korea-boundary.geojson
-fdf0e7038649bd447369f1269d3b6b653e04a4e38a5c6bb783505b65269ab056  ha-korea-map/ha-map-router.mjs
-7982fcfe349995ea23778f43b6d358781c61799c49f3569ca052b31151391e61  ha-korea-map/ha-map-sdk.mjs
-3512605343b5c50c0cd18e234d66ab1b70b38b246351afcc08ab237b60e87c9c  generate-provider-config.py
+696ce0a8c6ac22b2ce6756bbfe4a514861ec4caa9f11bcdc15545852d966c1d6  ha-korea-map/ha-map-router.mjs
+6286c5e833b0f2b7c15b0b0f2ca65bf7d34057f8426ef49baf06e59811096069  ha-korea-map/ha-map-sdk.mjs
+054be8eb6571fe34934d64215dee627b46b0ddf0c2ec69573c5cbb4cda97f865  generate-provider-config.py

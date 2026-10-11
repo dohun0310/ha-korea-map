@@ -2,7 +2,7 @@
 const loads = new Map(),
   failureSets = { naver: new Set(), google: new Set() };
 const authNames = { naver: "navermap_authFailure", google: "gm_authFailure" };
-export function sdkURL(provider, key, callback) {
+export function sdkURL(provider, key, callback, { submodules } = {}) {
   if (!["naver", "google"].includes(provider) || typeof key !== "string" || !key.trim())
     throw new Error("provider-key-missing");
   const u = new URL(
@@ -15,9 +15,24 @@ export function sdkURL(provider, key, callback) {
     u.searchParams.set("v", "quarterly");
     u.searchParams.set("loading", "async");
     u.searchParams.set("callback", callback);
+  } else if (submodules) {
+    // NAVER calls the callback once the requested submodules have loaded too.
+    u.searchParams.set("submodules", submodules);
+    u.searchParams.set("callback", callback);
   }
   return u.href;
 }
+// HA resolves its map style per theme mode into a palette; dark palettes end in "-dark"
+// (frontend 20260930.3 src/common/map/map-styles.ts paletteFor()).
+export function isDarkStyle(style) {
+  return typeof style?.palette === "string" && style.palette.endsWith("-dark");
+}
+function hasStyleIds(styleIds) {
+  return !!(styleIds?.light || styleIds?.dark);
+}
+// The filter HA itself applies to raster tiles in dark mode (ha-map.ts, --map-filter).
+export const TILE_DARK_FILTER =
+  "invert(0.9) hue-rotate(170deg) brightness(1.5) contrast(1.2) saturate(0.3)";
 function subscribeAuth(provider, fn) {
   const set = failureSets[provider],
     name = authNames[provider];
@@ -42,7 +57,7 @@ function subscribeAuth(provider, fn) {
 }
 export function loadOfficialSDK(
   provider,
-  { key, optIn = false, timeout = 12000, document = globalThis.document } = {},
+  { key, optIn = false, timeout = 12000, document = globalThis.document, styleIds } = {},
 ) {
   if (!optIn || !key || !document) return Promise.reject(new Error("provider-not-enabled"));
   if (!["naver", "google"].includes(provider)) return Promise.reject(new Error("provider-unknown"));
@@ -80,11 +95,13 @@ export function loadOfficialSDK(
     off = subscribeAuth(provider, () => done(false));
     timer = setTimeout(() => done(false), timeout);
     globalThis[callback] = () => done(true);
+    // NAVER Style Editor styles need the GL submodule (navermaps tutorial-2-Style-Editor).
+    const submodules = provider === "naver" && hasStyleIds(styleIds) ? "gl" : undefined;
     script.async = true;
-    script.src = sdkURL(provider, key, callback);
+    script.src = sdkURL(provider, key, callback, { submodules });
     script.onerror = () => done(false);
     script.onload = () => {
-      if (provider === "naver") done(true);
+      if (provider === "naver" && !submodules) done(true);
     };
     document.head.appendChild(script);
   });
@@ -112,6 +129,11 @@ export class SDKEngine {
     if (this.dead) throw new Error("provider-cancelled");
     const s = this.sdk;
     this.event = this.provider === "naver" ? s.Event : s.event;
+    // The style the map is drawn with. Google's colorScheme and NAVER's customStyleId are
+    // creation-time options, so a later theme change of those needs a new map (onRestyle).
+    this.dark = isDarkStyle(options.mapStyle);
+    this.drawnDark = this.dark;
+    const styleId = this.styleId(this.dark);
     // No built-in buttons (zoom, map type, street view, fullscreen); pinch/wheel/double-click zoom still work.
     this.map = new s.Map(container, {
       center: this.coord(options.center),
@@ -123,9 +145,19 @@ export class SDKEngine {
             mapTypeControl: false,
             streetViewControl: false,
             fullscreenControl: false,
+            colorScheme: this.dark
+              ? (s.ColorScheme?.DARK ?? "DARK")
+              : (s.ColorScheme?.LIGHT ?? "LIGHT"),
           }
-        : { scaleControl: false, mapTypeControl: false }),
+        : {
+            scaleControl: false,
+            mapTypeControl: false,
+            ...(styleId ? { gl: true, customStyleId: styleId } : {}),
+          }),
     });
+    this.applyTileFilter();
+    // NAVER may rebuild its tile layer; keep the filter on whatever layer is current.
+    if (this.provider === "naver") this.listen("tilesloaded", () => this.applyTileFilter());
     this.listen("click", (ev) => {
       const p = this.provider === "naver" ? ev.coord : ev.latLng;
       if (p) options.events?.click?.([p.lat(), p.lng()]);
@@ -153,6 +185,26 @@ export class SDKEngine {
   }
   coord(p) {
     return new this.sdk.LatLng(p[0], p[1]);
+  }
+  // Optional NAVER Style Editor id for a mode (config.styleIds = {light, dark}).
+  styleId(dark) {
+    return this.provider === "naver" ? this.config.styleIds?.[dark ? "dark" : "light"] : undefined;
+  }
+  // NAVER has no built-in dark map without a Style Editor id. Then the tile layer alone gets
+  // HA's raster dark filter: the overlay panes (markers, circles, paths) and the controls
+  // (logo, scale, attribution) are left untouched. The tile layer is found as the sibling of
+  // NAVER's documented overlay panes; anything holding a link or text is skipped.
+  applyTileFilter() {
+    if (this.provider !== "naver" || !this.map?.getPanes) return;
+    const panes = Object.values(this.map.getPanes() || {});
+    const parent = panes[0]?.parentNode;
+    if (!parent?.children) return;
+    const filter = this.dark && !this.styleId(this.drawnDark) ? TILE_DARK_FILTER : "";
+    for (const layer of [...parent.children]) {
+      if (panes.includes(layer)) continue;
+      if (layer.querySelector?.("a") || (layer.textContent || "").trim()) continue;
+      if (filter || layer.style.filter) layer.style.filter = filter;
+    }
   }
   listen(name, fn) {
     const h = this.event.addListener(this.map, name, fn);
@@ -386,8 +438,21 @@ export class SDKEngine {
       );
     else if (this.map) this.event.trigger(this.map, "resize");
   }
-  setMapStyle() {
-    /* HA MapLibre style cannot be applied to provider cartography; SDK default remains. */
+  // HA's light/dark style (theme_mode, or the HA theme's dark mode) on the provider map.
+  setMapStyle(style) {
+    if (!style || this.dead) return;
+    this.dark = isDarkStyle(style);
+    const recreate =
+      this.provider === "google" ||
+      this.styleId(true) !== undefined ||
+      this.styleId(false) !== undefined;
+    if (!recreate) {
+      this.applyTileFilter();
+      return;
+    }
+    if (this.dark === this.drawnDark || this.restyleRequested === this.dark) return;
+    this.restyleRequested = this.dark;
+    this.config.onRestyle?.();
   }
   setZoomControlPosition() {
     /* Zoom buttons are intentionally hidden on provider maps. */ this.map?.setOptions({

@@ -44,13 +44,13 @@ export class MapRouter {
     this.container.appendChild(el);
     return el;
   }
-  async select(provider) {
+  async select(provider, { force = false } = {}) {
     if (this.dead) return false;
     if (!["native", "naver", "google"].includes(provider)) return false;
     if (provider !== "native" && this.safeMode) return false;
     const generation = ++this.generation;
     this.cancelPending();
-    if (this.current?.provider === provider) return true;
+    if (this.current?.provider === provider && !force) return true;
     const stage = this.stage(),
       candidate = { provider, stage, engine: null, cancel: null };
     this.pending.add(candidate);
@@ -64,11 +64,17 @@ export class MapRouter {
       const construct = Promise.resolve().then(() =>
         provider === "native"
           ? this.nativeFactory()
-          : this.providerFactory(provider, () => {
-              void this.recover("provider-auth-failure").catch(() => {
-                this.reason = "native-recovery-failed";
-              });
-            }),
+          : this.providerFactory(
+              provider,
+              () => {
+                void this.recover("provider-auth-failure").catch(() => {
+                  this.reason = "native-recovery-failed";
+                });
+              },
+              // A creation-time style option changed (e.g. Google colorScheme): rebuild this
+              // provider, but only while this very engine is still the committed one.
+              () => (this.current === candidate ? this.select(provider, { force: true }) : false),
+            ),
       );
       construct.then(
         (e) => {
@@ -107,6 +113,8 @@ export class MapRouter {
                 center: view.center,
                 zoom: view.zoom,
                 zoomControlPosition: this.options.zoomControlPosition,
+                // HA's resolved light/dark style only (no tile token or other HA options).
+                mapStyle: this.settings.style || this.options.mapStyle,
                 events,
               };
         await e.init(stage, opts);
