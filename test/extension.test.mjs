@@ -98,3 +98,12 @@ test('legacy panel cannot hide a locations editor ancestor',()=>assert.equal(own
 test('unknown core fails closed',()=>assert.equal(installHook(fixture(),{coreVersion:'next',frontendVersion:'20260930.3'}).installed,false));
 test('panel ownership excludes editor',()=>{assert.equal(ownsDefaultPanel({parentNode:panel},'/map'),true);assert.equal(ownsDefaultPanel({parentNode:{localName:'ha-locations-editor'}},'/map'),false);assert.equal(ownsDefaultPanel({parentNode:panel},'/config/zone'),false)});
 test('factory exact restoration and native default',async()=>{const C=fixture(),old=C.prototype._createEngine;const ctl=installHook(C,{coreVersion:'2026.10.1',frontendVersion:'20260930.3',pathname:()=>'/map'});assert.ok(ctl.installed);const m=new C();m.parentNode=panel;const e=await m._createEngine();assert.equal(e.labAdapter,undefined);ctl.uninstall();assert.equal(C.prototype._createEngine,old)});
+test('auto mode mounts no selector or status UI on the map',async()=>{
+ const appended=[];const C=fixture();let fetched=0;const fetch=async()=>{fetched++;return {ok:false}};
+ const ctl=installHook(C,{coreVersion:'2026.10.1',frontendVersion:'20260930.3',mode:'official',provider:'auto',providers:{naver:{key:'unit-public-naver',optIn:true},google:{key:'unit-public-google',optIn:true}},boundary:{url:'/local/b.geojson'},fetch,pathname:()=>'/map/0'});
+ const m=new C();m.parentNode=dashboard();m.clusterMarkers=false;const engine=await m._createEngine();
+ const el=()=>({style:{},dataset:{},append(...x){appended.push(...x)},appendChild(x){appended.push(x)},remove(){},addEventListener(){},ownerDocument:{createElement:()=>el()}});
+ await engine.init(el(),{center:[37.5,127],zoom:10,events:{}}).catch(()=>{});
+ assert.equal(appended.some(x=>x?.children?.some?.(c=>c?.tagName==='SELECT')||x?.tagName==='SELECT'),false);assert.equal(engine.ui,undefined,'no controls object');
+ assert.equal('control' in (ctl.diagnostics().routers[0]||{}),false);engine.destroy();ctl.uninstall();
+});

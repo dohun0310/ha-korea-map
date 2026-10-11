@@ -1,8 +1,7 @@
 // Pinned private HA integration; official SDKs are only loaded with key + opt-in.
-import {MapRouter} from './ha-map-router.mjs?v=auto-2';
-import {SDKEngine} from './ha-map-sdk.mjs?v=auto-2';
-import {mountControls} from './ha-map-controls.mjs?v=auto-2';
-import {AutoSwitch,loadBoundary} from './ha-map-auto.mjs?v=auto-2';
+import {MapRouter} from './ha-map-router.mjs?v=auto-3';
+import {SDKEngine} from './ha-map-sdk.mjs?v=auto-3';
+import {AutoSwitch,loadBoundary} from './ha-map-auto.mjs?v=auto-3';
 const installed=new WeakMap();
 export function ownsDefaultPanel(map,path=globalThis.location?.pathname){
  if(path!=='/map'&&path!=='/map/0')return false;
@@ -39,7 +38,6 @@ export function installHook(C,{coreVersion,frontendVersion,pathname=()=>globalTh
    if(provider==='auto')new AutoSwitch(router,{boundary:loadBoundary(boundary.url,{fetch})});
    // HA's clustering is on by default. Do not silently drop it or fetch SDK.
    if(this.clusterMarkers!==false){router.blockClustering=true;router.safeMode=true;router.reason='clustering-requires-native';}
-   let ui;const init=router.init.bind(router);router.init=async(container,options)=>{await init(container,options);if(!router.dead)ui=mountControls(router,{parent:container,document:container.ownerDocument,allowed:['naver','google'].filter(enabled)});router.ui=ui;};const destroy=router.destroy.bind(router);router.destroy=()=>{ui?.remove();destroy();};
    routers.add(router);return router;
   }
   // Mock is a transparent facade over the REAL native engine, not a provider map.
@@ -54,7 +52,7 @@ export function installHook(C,{coreVersion,frontendVersion,pathname=()=>globalTh
  Object.defineProperty(p,'_createEngine',{...d,value:wrapper});
  // Verification API (no coordinates/keys in diagnostics). select() is a manual choice and turns auto off.
  const all=fn=>Promise.all([...routers].map(fn));
- const ctl={installed:true,diagnostics(){return {mode,provider,routers:[...routers].map(r=>({...r.diagnostics(),control:r.ui?{value:r.ui.select.value,text:r.ui.selectedText()}:null}))};},select(name){return all(r=>r.choose?r.choose(name):r.select(name));},auto(){return all(r=>r.choose('auto'));},
+ const ctl={installed:true,diagnostics(){return {mode,provider,routers:[...routers].map(r=>r.diagnostics())};},select(name){return all(r=>r.choose?r.choose(name):r.select(name));},auto(){return all(r=>r.choose('auto'));},
   setView(center,zoom){for(const r of routers)r.setView(center,zoom);},panTo(center){for(const r of routers)r.panTo(center);},fitBounds(points,options={}){for(const r of routers)r.fitBounds(points,options);},recover(){return Promise.all([...routers].map(r=>r.recover()));},resume(name=provider){return Promise.all([...routers].map(r=>r.resume(name)));},uninstall(){enabled=false;for(const r of routers)void r.recover('uninstalled-native-safe-mode').catch(()=>{});if(p._createEngine===wrapper)Object.defineProperty(p,'_createEngine',d);installed.delete(C);ctl.installed=false;}};installed.set(C,ctl);return ctl;
 }
 export function detectFrontendVersion({pin,origin,preloads=[],resources=[]}={}){

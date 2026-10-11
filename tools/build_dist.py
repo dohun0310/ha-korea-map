@@ -7,9 +7,9 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 WWW = ROOT / 'config' / 'www'
 DIST = ROOT / 'dist'
 PKG = DIST / 'ha-korea-map'
-MODULES = ['ha-map-extension.mjs', 'ha-map-router.mjs', 'ha-map-sdk.mjs', 'ha-map-controls.mjs', 'ha-map-auto.mjs', 'ha-map-korea-boundary.geojson']
-BOOTSTRAP = """import {labConfig} from './ha-map-config.mjs?v=auto-2';
-import {startAutoHook} from './ha-map-extension.mjs?v=auto-2';
+MODULES = ['ha-map-extension.mjs', 'ha-map-router.mjs', 'ha-map-sdk.mjs', 'ha-map-auto.mjs', 'ha-map-korea-boundary.geojson']
+BOOTSTRAP = """import {labConfig} from './ha-map-config.mjs?v=auto-3';
+import {startAutoHook} from './ha-map-extension.mjs?v=auto-3';
 // Production entry (ha-korea-map.js). ha-map-config.mjs is generated on the HA host by
 // generate-provider-config.py (see INSTALL.md); it is never shipped in dist/.
 // Unknown HA/frontend versions fail closed: the original HA map stays untouched.
