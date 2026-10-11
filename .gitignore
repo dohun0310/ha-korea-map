@@ -1,0 +1,22 @@
+# API 키와 키가 들어간 생성 파일은 커밋하지 않습니다.
+provider-keys.env
+*.env
+!provider-keys.env.example
+config/www/ha-map-lab-config.mjs
+dist/ha-korea-map/ha-map-config.mjs
+
+# 테스트용 HA 컨테이너가 만드는 상태 파일
+config/.storage/
+config/.cache/
+config/deps/
+config/tts/
+config/blueprints/
+config/home-assistant.log*
+config/home-assistant_v2.db*
+config/.HA_VERSION
+
+# 로컬 개발 환경
+.venv/
+__pycache__/
+*.pyc
+node_modules/
