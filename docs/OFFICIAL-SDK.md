@@ -1,108 +1,151 @@
-# 공식 NAVER / Google Maps SDK — 격리 HA 실험실
+# 공식 SDK 어댑터와 테스트용 HA 검증
 
-## 현재 상태와 경계
+이 문서는 NAVER Maps JavaScript API v3와 Google Maps JavaScript API를 HA 지도 엔진으로 연결하는 방식과, 격리된 테스트용 HA에서 검증한 범위를 설명합니다.
 
-실제 `naver.maps.Map` / `google.maps.Map` 및 각 SDK `OverlayView`, `Circle`, `Polyline`을 생성하는 어댑터와 HA MapEngine Router를 구현했다. SDK 모의 facade가 아니다. SDK fake는 Node 단위 테스트에만 사용한다. **API 키가 아직 없어 실제 외부 지도, 인증·과금·지리적 타일·SDK의 Shadow DOM 동작은 검증하지 못했다.** 키 없는 배포는 `mode: native`이며 SDK 스크립트를 요청하지 않는다.
+## 구성
 
-현재 실행 컨테이너 이름은 `ha-map-lab`, HA 2026.10.1 / frontend 20260930.3, LAN `<HA 호스트>:18123`이다. Docker 네트워크·권한·포트·다른 HA는 변경하지 않았다. `/map/0` 기본 지도 대시보드만 소유한다. 다른 대시보드, 편집기, `_forceLeaflet`/rasterOnly, 알 수 없는 빌드/메서드는 원래 factory를 유지한다. 기존 `extra_module_url: /local/ha-map-lab-bootstrap.mjs?v=dashboard-2` 등록을 그대로 활용하며 bootstrap 내부 import만 `official-1`로 갱신했다.
+- `ha-map-extension.mjs`: `ha-map` 요소의 비공개 메서드인 `_createEngine`을 감쌉니다. `/map` 대시보드에 있는 지도 카드에서만 라우터를 반환하고, 다른 화면에서는 HA 원래 엔진을 그대로 반환합니다.
+- `ha-map-router.mjs`: HA가 보기에는 하나의 MapEngine처럼 동작합니다. 마커, 원, 경로를 기록해 두었다가 엔진을 바꿀 때 새 엔진에 다시 그립니다.
+- `ha-map-sdk.mjs`: 실제 `naver.maps.Map`, `google.maps.Map`과 각 SDK의 `OverlayView`, `Circle`, `Polyline`을 만드는 어댑터입니다.
+- `ha-map-auto.mjs`: 지도 중심이 대한민국 경계 안에 있는지 판정해 NAVER 지도와 Google 지도를 자동으로 고릅니다.
+- `ha-korea-map.js`: 운영 환경에서 사용하는 진입 모듈입니다. 키 설정 파일을 읽고 확장을 설치합니다.
 
-**사적·합성 좌표의 lab 전용 opt-in 실험**이다. production 라이선스 승인이나 다중 지도 제공자 이용 약관의 적합성을 보장하지 않는다. 실사용 위치 데이터로 검증하기 전에 동의와 약관을 별도로 확인해야 한다.
+Node 단위 테스트에서는 SDK를 흉내 내는 가짜 객체(fake)를 사용합니다. 이 테스트가 통과했다고 해서 실제 SDK 인증이나 지도 표시가 증명되지는 않습니다.
 
-## 키 공급 및 실행
+## 테스트용 HA
 
-키를 채팅/로그에 붙이지 말고 이 lab 디렉터리의 비공개 파일에 작성한다. NAVER Client Secret은 필요 없으며 파일에 넣지 않는다.
+- 컨테이너 이름은 `ha-map-lab`이고, 버전은 Core 2026.10.1, Frontend 20260930.3입니다. LAN 주소는 `<HA 호스트>:18123`입니다.
+- `/map/0` 기본 지도 대시보드에서만 확장이 동작합니다. 다른 대시보드와 편집 화면, `_forceLeaflet`이나 `rasterOnly` 상태, 알 수 없는 빌드에서는 원래 엔진을 그대로 사용합니다.
+- `configuration.yaml`에 등록된 `extra_module_url: /local/ha-map-lab-bootstrap.mjs?v=dashboard-2`를 사용합니다. 모듈을 바꿀 때는 bootstrap 안에 있는 import 쿼리만 올리면 되므로 컨테이너를 재시작하지 않아도 됩니다.
+- 이 환경은 개인 위치 대신 합성 좌표를 사용하는 실험 환경입니다. 운영 환경의 라이선스 승인이나 여러 지도 제공자를 함께 쓰는 구성이 약관에 맞는지는 보장하지 않습니다.
+
+## 키 준비와 설정 생성
+
+키를 채팅이나 로그에 붙여 넣지 않습니다. 저장소 루트에 있는 비공개 파일 `provider-keys.env`에 직접 입력합니다. NAVER Client Secret은 필요하지 않으므로 이 파일에 넣지 않습니다.
 
 ```sh
 cd <저장소 루트>
 test -e provider-keys.env || install -m 600 provider-keys.env.example provider-keys.env
 chmod 600 provider-keys.env
-# 편집기로 아래 두 필드 중 사용할 제공자의 공개 브라우저 키를 입력
+# 편집기로 사용할 제공자의 공개 브라우저 키를 입력합니다.
 # NAVER_MAP_KEY_ID=
 # GOOGLE_MAPS_API_KEY=
-python3 generate-provider-config.py --provider naver --opt-in
-# 또는
-python3 generate-provider-config.py --provider google --opt-in
+python3 generate-provider-config.py --provider auto --opt-in \
+  --boundary-url /local/ha-map-korea-boundary.geojson
 ```
 
-`provider-keys.env`는 source/eval하지 않는다. generator는 지정한 두 필드만 읽고 값 형식을 검사한다. 관련 없는 변수는 브라우저에 보내지 않는다. 기본은 선택한 제공자의 키만 출력한다. 생성된 `/local/ha-map-lab-config.mjs`는 **브라우저가 볼 수 있는 키**만 담으며 HA 토큰·서버 secret은 포함하지 않는다. private env는 소유자 확인 후 0600으로 제한하고 출력은 원자적으로 교체한다. 두 제공자 간 수동 전환 실험을 별도로 승인한 경우에만 두 키를 채운 뒤 `--allow-switching`을 추가한다. Google과 다른 제공자의 동일 애플리케이션 사용 관련 약관은 미해결이다.
+- 생성기는 `provider-keys.env`를 셸에서 실행하지 않고, 위의 두 필드만 읽어 형식을 검사합니다. 다른 변수는 브라우저로 보내지 않습니다.
+- 테스트용 HA에서는 모듈과 경계 파일이 `/local/` 바로 아래에 있으므로 `--boundary-url`을 지정합니다. 운영 환경의 진입 모듈은 같은 폴더에 있는 경계 파일을 사용합니다.
+- 생성된 `config/www/ha-map-lab-config.mjs`에는 브라우저에 공개되는 키만 들어갑니다. HA 토큰이나 서버용 비밀 값은 넣지 않습니다. 생성기는 키 파일의 소유자를 확인하고 권한을 0600으로 바꾸며, 출력 파일은 원자적으로 교체합니다.
+- NAVER는 NCP Maps Application에서 Dynamic Map을 사용하도록 설정하고 Web 서비스 URL을 등록해야 합니다. SDK는 `ncpKeyId` 파라미터로 불러오며, 이전 방식인 `ncpClientId`는 사용하지 않습니다. NCP 콘솔 가이드는 조회 시 HTTP 403이 반환되어, 포트와 도메인을 어떻게 비교하는지는 확인하지 못했습니다.
+- Google은 Maps JavaScript API를 활성화하고 결제를 설정한 다음, 웹사이트(HTTP 리퍼러) 제한과 API 제한을 적용합니다. 테스트용 HA에서는 `http://<HA 호스트>:18123/*`을 리퍼러로 등록합니다.
+- 요금은 각 제공자의 요금표와 실제 사용량에 따라 결정됩니다. 지도를 새로 만들 때마다 지도 로드가 발생하므로, 자동 전환과 테마 변경은 사용량을 늘릴 수 있습니다.
 
-NAVER는 NCP Maps Application의 **Dynamic Map** 사용과 Web 서비스 URL 등록이 필요하다. SDK는 `ncpKeyId`로 로드하며 `ncpClientId` 구형 방식을 사용하지 않는다. 콘솔의 실제 서비스 URL 허용 규칙을 확인하고 이 lab에 사용할 주소만 등록한다. NCP 세부 콘솔 가이드는 이번 fetch가 HTTP 403이므로 포트/도메인 정규화 규칙은 확정하지 않았다.
+## 그룹화(클러스터링)
 
-Google은 Maps JavaScript API 활성화, billing 설정 및 **website/HTTP referrer + API restriction**을 적용한다. 실제 접속 origin에 맞춰 제한하고 Maps JavaScript API만 허용한다. 예시 lab 주소는 `http://<HA 호스트>:18123/*`이며 콘솔 검증 규칙을 확인한다. 키는 브라우저에 공개되므로 referrer 제한 없는 키/서버 공용 키를 넣지 않는다. 과금은 provider의 실제 요금표·프로젝트 사용량에 따른다. 무료 또는 비용 상한을 보장하지 않는다. 제공자 간 전환은 새 지도 인스턴스 로드를 발생시킬 수 있어 과금이 늘 수 있다.
+지도 카드는 `cluster` 설정을 읽으며 기본값은 true입니다(Frontend 20260930.3 `hui-map-card.ts`: `this._config.cluster ?? true`). 라우터는 HA가 넘기는 `setClustering` 값을 저장해 현재 엔진에 전달하고, 엔진을 바꿀 때 같은 값을 다시 적용합니다. 그룹화 버튼을 눌러도 안전 모드로 바뀌지 않고 제공자 지도를 유지합니다. 현재 SDK 엔진은 그룹 아이콘을 그리지 않고 마커를 하나씩 표시합니다. 상태는 `haMapExtension.diagnostics().routers[0]`에 있는 `clustering`과 `clusterRendering` 값으로 확인합니다.
 
-### 그룹화(클러스터링)
+## 지도 스타일(다크 모드)
 
-hui-map-card의 클러스터링 설정 키는 `cluster`이고 기본값은 true이다(frontend 20260930.3 `hui-map-card.ts`: `this._config.cluster ?? true`). 라우터는 HA가 넘기는 `setClustering` 값을 저장해 현재 엔진에 전달하고, 엔진을 바꿀 때 다시 적용한다. 그룹화 버튼을 눌러도 안전 모드로 바뀌지 않고 제공자 지도를 유지한다. 지금 SDK 엔진은 그룹 아이콘을 그리지 않고 마커를 하나씩 표시한다. 상태는 `haMapExtension.diagnostics().routers[0].clustering`과 `clusterRendering`으로 확인한다.
+HA는 지도 카드의 `theme_mode`와 HA 테마의 다크 모드 설정으로 스타일을 정하고, 엔진의 `setMapStyle`로 결과를 전달합니다(`ha-map.ts`의 `_darkMode`, `_updateMapAppearance`). 전달되는 값은 팔레트 이름을 담고 있으며, 다크 모드일 때는 이름이 `-dark`로 끝납니다(`map-styles.ts`의 `paletteFor`). 확장은 이 규칙으로 다크 모드를 판단합니다.
 
-실측(2026-10-11, lab): NAVER는 `/map/0`에서 렌더링·복구·재개 확인. Google은 `ApiTargetBlockedMapError`로 인증 실패 후 기본 지도로 자동 복구됨 — 키의 API 제한에 Maps JavaScript API가 포함되지 않은 상태.
+- Google: 지도를 만들 때 `colorScheme`을 `DARK` 또는 `LIGHT`로 지정합니다. Google 문서는 이 옵션을 지도를 만들 때만 지정할 수 있다고 설명합니다. 그래서 테마가 바뀌면 엔진이 라우터에 지도를 다시 만들어 달라고 요청하고, 라우터는 같은 제공자의 새 엔진을 만들어 오버레이를 다시 그린 다음 이전 엔진을 제거합니다. Map ID가 필요하지 않습니다. JSON `styles` 배열도 Map ID 없이 실행 중에 바꿀 수 있지만, Google이 제공하는 다크 디자인이 아니라 직접 색을 정의해야 하므로 사용하지 않았습니다.
+- NAVER: 공식 문서에서 찾은 스타일 지정 방법은 Style Editor에서 발행한 스타일 ID를 `customStyleId`로 지정하는 방법뿐이며, 이 방법은 GL 서브 모듈(`submodules=gl`)과 콘솔 작업이 필요합니다. 그래서 기본 동작으로는 HA가 자체 래스터 지도에 사용하는 필터(`invert(0.9) hue-rotate(170deg) brightness(1.5) contrast(1.2) saturate(0.3)`)를 타일 층에만 적용합니다.
+  - 타일 층은 NAVER가 문서로 공개한 오버레이 pane(`getPanes()`)과 같은 부모 아래에 있는 형제 요소로 찾습니다. 링크나 글자를 포함한 요소는 제외합니다. 이 DOM 구조는 NAVER가 문서로 보장하는 내용이 아니므로, 실제 화면에서 로고와 저작권 표시가 변형되지 않았는지 확인해야 합니다.
+  - 마커, 원, 경로가 있는 pane과 로고, 축척, 저작권 표시에는 필터를 적용하지 않습니다.
+  - 이 필터는 공식 스타일이 아닙니다. NAVER 약관이 타일의 색 변형을 허용하는지는 확인하지 못했습니다.
+  - `generate-provider-config.py`에 `--naver-style-light`, `--naver-style-dark`를 지정하면 필터 대신 공식 스타일을 사용합니다. 이 경로는 실제 키와 스타일 ID로 검증하지 않았습니다.
 
-설정 생성 후 `/map/0`을 캐시 무시 새로고침한다. 기존 mount가 hook 설치보다 먼저 시작하면 대시보드를 나갔다 다시 들어가 map card를 remount한다. 최초 instance 전에 설치되었다고 가정하지 않는다. 필요 시 bootstrap의 `whenDefined`/hass-version polling 결과를 확인한다. 현재 extra_module 등록은 이미 살아 있으므로 이 파일 변경만으로 컨테이너 재시작은 요구되지 않는다.
+## 실제 화면 검증 기록
 
-## 브라우저 검증 체크리스트 (parent의 기존 로그인 세션에서)
+2026-10-11에 테스트용 HA에서 확인한 내용은 다음과 같습니다.
 
-HA 인증/저장소를 읽지 않고 다음 결과만 확인한다:
+- NAVER: `/map/0`에서 지도가 표시되고, 안전 모드로 복구한 뒤 다시 NAVER 지도로 돌아오는 동작을 확인했습니다.
+- Google: 당시 키의 API 제한에 Maps JavaScript API가 빠져 있어 `ApiTargetBlockedMapError`로 인증에 실패했고, 확장은 HA 원래 지도로 자동 복구했습니다.
+
+그룹화 유지, 다크 모드, HACS 경로는 이 기록 이후에 추가했으므로 브라우저 검증이 아직 필요합니다.
+
+## 브라우저 검증 방법
+
+로그인된 브라우저에서 HA 인증 정보나 저장소를 읽지 않고, 다음 결과만 확인합니다.
 
 ```js
 await window.haMapExtensionReady;
 window.haMapExtension.diagnostics();
-// mode: official, provider: naver/google, routers[].provider가 선택한 제공자
-// pending: 0, safeMode: false; diagnostics에는 키나 좌표/토큰이 없다.
-await window.haMapExtension.recover(); // 기본 지도 안전 모드
-await window.haMapExtension.resume('naver'); // 키/opt-in된 제공자만 가능
+// routers[0].provider가 naver 또는 google이고, pending은 0, safeMode는 false여야 합니다.
+// diagnostics에는 키, 좌표, 토큰이 들어 있지 않습니다.
+await window.haMapExtension.recover(); // HA 원래 지도로 돌아가고 안전 모드로 바뀝니다.
+await window.haMapExtension.resume("naver"); // 키와 opt-in이 설정된 제공자만 다시 켤 수 있습니다.
 ```
 
-지도 위 선택 UI는 제거했다(자동 전용). 수동 제어는 개발자 콘솔 API로만 한다. 제공자 지도의 확대·축소 버튼도 숨긴다. 로고/attribution이 있는 아래쪽은 건드리지 않는다. 실제 지리 타일, marker 클릭으로 more-info, 앵커와 위치, meter-radius 정확도/zone, path segment와 point title, pan/zoom/bounds, 다른 dashboard와 zone editor의 native 유지, DOM teardown을 직접 검증해야 한다. SDK `tilesloaded`만으로 올바른 인증/지도 내용까지 증명된 것으로 간주하지 않는다.
+지도 위에는 선택 UI가 없으므로 수동 제어는 개발자 콘솔에서만 합니다. 제공자 지도의 확대·축소 버튼도 숨깁니다. 실제 화면에서는 다음 항목을 직접 확인해야 합니다.
 
-SDK timeout/인증 실패/첫 타일 프레임 실패는 안전 모드 native로 복구한다. 기존 native가 건강하면 재초기화하지 않고 유지한다. SDK가 commit된 뒤 실패하면 원래 factory에서 fresh native를 생성해 overlay records를 재생한다. native 원래 renderer마저 실패하면 `native-recovery-failed`로 표시하며 성공을 꾸미지 않는다. 네트워크 script 로드 실패나 키 변경은 전체 reload 후 다시 시도한다 (loader는 같은 document의 단일 키 소유권을 유지한다).
+- 지리 정보가 담긴 타일이 표시되는지 확인합니다.
+- 마커를 누르면 more-info 창이 열리는지 확인합니다.
+- 마커의 기준점과 위치, 미터 단위 정확도 원과 구역 원, 경로 선분과 점 제목이 맞게 표시되는지 확인합니다.
+- 이동, 확대, 전체 보기가 동작하는지 확인합니다.
+- 다른 대시보드와 구역 편집기에서 원래 지도를 사용하는지 확인합니다.
+- 화면을 벗어날 때 DOM이 정리되는지 확인합니다.
 
-## Router/SDK 세부 사항
+SDK의 `tilesloaded` 이벤트가 발생했다는 사실만으로 인증이나 지도 내용이 올바르다고 판단하지 않습니다.
 
-- HA `[latitude, longitude]` → provider LatLng 변환; center/zoom/view/bounds, resize/contains 지원.
-- 같은 marker DOM을 SDK OverlayView에 재배치해 HA listener를 유지하고 wrapper에 anchor/size/접근성·pointer 설정을 적용한다. NAVER의 pane은 `overlayImage`, Google은 `overlayMouseTarget`이다.
-- Circle의 radius는 meter. marker GPS decoration의 수명은 marker와 같다. HA의 이미 분할된 path segments 및 point markers를 재생한다. point tooltip HTML은 caller-escaped HTML을 plain browser title로 표시한다 (native popup 모양을 재현하지 않는다).
-- stable logical circle/path handles의 update/remove는 전환 중에도 최신 값을 보존한다. stale loader/init와 destroy/timeout은 generation 취소 및 늦은 candidate destroy로 처리한다. candidate는 commit 전 숨겨 건강한 native를 가리지 않는다. 같은 provider 재선택은 인스턴스를 재생성하지 않는다.
-- HA tile-proxy token은 native 엔진에만 전달된다. SDK 초기화 옵션은 center/zoom/controls/events만 구성한다. SDK 사용 시 선택한 제공자에는 지도 중심/viewport, 타일 요청과 브라우저 네트워크 정보가 전달되고 marker/circle/path 좌표가 해당 SDK 런타임에 들어간다. HA 인증 토큰/전체 hass/state 객체를 보내지는 않는다. SDK 내부 telemetry의 완전한 비전송은 보장하지 않는다.
-- HA MapLibre 스타일/강제 dark 테마, native popup HTML 디자인, 세부 imperative animation semantics, 임의 scale unit/국제 저줌 NAVER coverage는 provider equivalent가 아니다. 공식 기본 cartography를 유지하며 원본 logo/attribution을 숨기지 않는다.
-- 편집/drag API는 구현하지 않고 편집 화면 자체를 소유하지 않는다. 그룹화를 켜도 제공자 지도를 유지하고, 지금은 마커를 하나씩 표시한다.
-- 국경/대한민국/독도 자동 판정 polygon은 추가하지 않았다. 정확한 영토 경계라 주장하는 사각형/샘플 polygon을 넣지 않는다. 향후 자동 국가 선택은 licensed public boundary 또는 사용자가 검증한 local GeoJSON과 근거를 별도 추가한다. 현재는 명시적 제공자 선택/전환이다.
+## 실패 처리
+
+- SDK를 불러오는 시간이 초과되거나, 인증에 실패하거나, 첫 타일이 표시되지 않으면 안전 모드로 바꾸고 HA 원래 지도를 사용합니다.
+- 기존 원래 지도가 정상이면 다시 만들지 않고 그대로 사용합니다. SDK 지도로 바뀐 뒤에 실패하면 원래 생성 함수로 새 지도를 만들고 오버레이를 다시 그립니다.
+- 원래 지도를 만드는 작업마저 실패하면 `native-recovery-failed`로 표시하고, 성공한 것처럼 꾸미지 않습니다.
+- 스크립트를 불러오지 못했거나 키가 바뀌었다면 페이지를 새로고침해야 다시 시도합니다. 로더는 한 문서에서 하나의 키만 사용합니다.
+
+## 라우터와 SDK 세부 동작
+
+- HA가 사용하는 `[위도, 경도]` 좌표를 각 SDK의 LatLng로 바꿉니다. 중심, 줌, 화면 범위, 크기 변경, 포함 여부 확인을 지원합니다.
+- HA가 넘긴 마커 DOM을 그대로 SDK OverlayView 안으로 옮기므로 HA가 등록한 이벤트 리스너가 유지됩니다. 감싸는 요소에는 기준점, 크기, 접근성 속성, 포인터 설정을 적용합니다. NAVER는 `overlayImage` pane을, Google은 `overlayMouseTarget` pane을 사용합니다.
+- 원의 반지름 단위는 미터입니다. GPS 정확도 원은 마커와 함께 만들어지고 함께 사라집니다. 경로는 HA가 나눈 선분과 점을 그대로 그립니다.
+- 경로 점의 툴팁 HTML은 `<template>` 요소로 해석한 다음 글자만 꺼내 브라우저 기본 툴팁(title)으로 표시합니다. `<template>` 안에서는 이미지가 로드되지 않고 이벤트 핸들러도 실행되지 않습니다. HA의 원래 팝업 모양은 재현하지 않습니다.
+- 원과 경로 핸들의 update와 remove는 엔진을 바꾸는 도중에도 최신 값을 유지합니다. 늦게 끝난 로더나 초기화 결과는 세대(generation) 번호로 무시하고 해당 엔진을 제거합니다. 새 엔진은 준비가 끝나기 전까지 숨겨 두므로 정상 동작 중인 지도를 가리지 않습니다.
+- HA 타일 토큰은 원래 엔진에만 전달합니다. SDK 엔진에는 중심, 줌, 컨트롤 위치, 지도 스타일, 이벤트만 전달합니다. SDK를 사용하면 지도 중심, 화면 범위, 타일 요청, 브라우저 네트워크 정보가 제공자에게 전달되고, 마커·원·경로 좌표가 SDK 안으로 들어갑니다. HA 인증 토큰이나 hass 객체 전체는 보내지 않습니다. SDK 내부의 원격 측정까지 전송되지 않는다고 보장하지는 않습니다.
+- 편집과 드래그 API는 구현하지 않았으며, 편집 화면에서는 확장이 동작하지 않습니다.
 
 ## 롤백
 
 ```sh
 cd <저장소 루트>
 python3 generate-provider-config.py --provider native
-# /map/0 캐시 무시 새로고침
+# /map/0을 캐시를 무시하고 새로고침합니다.
 ```
 
-즉시 복구는 `await window.haMapExtension.recover()`이다. 완전 hook 제거는 `window.haMapExtension.uninstall()` 후 reload한다. 이후 third-party patch가 descriptor를 교체했다면 uninstall이 덮어쓰지 않는다. 영구적으로 제거하려면 lab `configuration.yaml`의 extra_module_url 등록만 제거하고 **이 lab 컨테이너만 승인받아 재시작**한다.
+즉시 원래 지도로 돌아가려면 `await window.haMapExtension.recover()`를 실행합니다. 훅을 완전히 제거하려면 `window.haMapExtension.uninstall()`을 실행한 다음 새로고침합니다. 다른 확장이 그 사이에 `_createEngine`을 바꿨다면 uninstall은 그 변경을 덮어쓰지 않습니다. 영구적으로 제거하려면 테스트용 HA의 `configuration.yaml`에서 `extra_module_url` 항목만 삭제하고, 승인을 받은 다음 이 컨테이너만 재시작합니다.
 
 ## 재현 가능한 검증
 
 ```sh
-node --test test/*.test.mjs
+node --test --test-timeout=8000 test/*.test.mjs
 python3 -m unittest discover -s test -p '*_test.py' -v
-python3 verify-dashboard-deployment.py
-node --check config/www/ha-map-sdk.mjs
-node --check config/www/ha-map-router.mjs
-node --check config/www/ha-map-controls.mjs
-node --check config/www/ha-map-extension.mjs
 ```
 
-Node fake tests는 인증·과금이나 실제 SDK render 증거가 아니다. deployment 검증은 정확한 lab의 HTML preload pin/extra-module 등록과 HTTP served 파일이 host artifact와 일치하는지만 검증한다. 로그인 브라우저의 실지도 SDK 검증과는 별도 gate이다.
+Node 테스트는 가짜 SDK로 실행하므로 인증, 요금, 실제 SDK 화면을 증명하지 않습니다. 로그인한 브라우저에서 실제 지도를 확인하는 검증은 별도 단계입니다.
 
-## 공식 근거 (개발 시 원문 fetch, 요금 수치는 고정하지 않음)
+## 근거 문서
 
-- HA MapEngine pinned source: https://github.com/home-assistant/frontend/blob/20260930.3/src/common/map/map-engine.ts
-- NAVER SDK loader/auth: https://navermaps.github.io/maps.js.ncp/docs/tutorial-2-Getting-Started.html
-- NAVER Application / Dynamic Map: https://navermaps.github.io/maps.js.ncp/docs/tutorial-1-Getting-Client-ID.html
+요금 수치는 바뀔 수 있으므로 이 문서에 고정하지 않습니다.
+
+- HA MapEngine 계약: https://github.com/home-assistant/frontend/blob/20260930.3/src/common/map/map-engine.ts
+- HA 지도 스타일: https://github.com/home-assistant/frontend/blob/20260930.3/src/common/map/map-styles.ts
+- HA 지도 요소: https://github.com/home-assistant/frontend/blob/20260930.3/src/components/map/ha-map.ts
+- NAVER SDK 로드와 인증: https://navermaps.github.io/maps.js.ncp/docs/tutorial-2-Getting-Started.html
+- NAVER Application과 Dynamic Map: https://navermaps.github.io/maps.js.ncp/docs/tutorial-1-Getting-Client-ID.html
 - NAVER OverlayView: https://navermaps.github.io/maps.js.ncp/docs/naver.maps.OverlayView.html
-- NAVER panes/events/bounds: https://navermaps.github.io/maps.js.ncp/docs/naver.maps.Map.html
-- NAVER Maps product/pricing entry: https://www.ncloud.com/product/applicationService/maps
-- Google SDK loader: https://developers.google.com/maps/documentation/javascript/load-maps-js-api
+- NAVER Map(pane, 이벤트, `gl`, `customStyleId`): https://navermaps.github.io/maps.js.ncp/docs/naver.maps.Map.html
+- NAVER Style Editor 연동: https://navermaps.github.io/maps.js.ncp/docs/tutorial-2-Style-Editor.html
+- NAVER 서브 모듈: https://navermaps.github.io/maps.js.ncp/docs/tutorial-4-Submodules.html
+- NAVER Maps 상품과 요금: https://www.ncloud.com/product/applicationService/maps
+- Google SDK 로드: https://developers.google.com/maps/documentation/javascript/load-maps-js-api
+- Google 지도 색 구성(colorScheme): https://developers.google.com/maps/documentation/javascript/mapcolorscheme
+- Google Map 옵션(`colorScheme`, `styles`): https://developers.google.com/maps/documentation/javascript/reference/map
 - Google OverlayView: https://developers.google.com/maps/documentation/javascript/customoverlays
-- Google key restrictions: https://developers.google.com/maps/api-security-best-practices
-- Google usage/billing: https://developers.google.com/maps/documentation/javascript/usage-and-billing
-- Google attribution/policies: https://developers.google.com/maps/documentation/javascript/policies
-- Google service-specific terms (적용 계약/지역/사용 형태의 개별 검토 필요): https://cloud.google.com/maps-platform/terms/maps-service-terms
+- Google 키 제한: https://developers.google.com/maps/api-security-best-practices
+- Google 사용량과 요금: https://developers.google.com/maps/documentation/javascript/usage-and-billing
+- Google 표시 의무와 정책: https://developers.google.com/maps/documentation/javascript/policies
+- Google 서비스별 약관: https://cloud.google.com/maps-platform/terms/maps-service-terms
 
-법률 자문/production 허가 결론이 아니다. 공식 문서에 있는 승인·표시·billing 요구와 다중 provider 구성의 적용 조건은 실제 배포 전에 다시 확인한다.
+이 문서는 법률 자문이나 운영 허가에 대한 결론이 아닙니다. 공식 문서에 있는 승인, 표시, 요금 요구 사항과 여러 지도 제공자를 함께 쓰는 구성의 적용 조건은 실제 배포 전에 다시 확인해야 합니다.
