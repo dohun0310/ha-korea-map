@@ -35,8 +35,8 @@ export class SDKEngine {
   this.sdk=await (this.config.loader||loadOfficialSDK)(this.provider,this.config);
   if(this.dead)throw new Error('provider-cancelled');
   const s=this.sdk;this.event=this.provider==='naver'?s.Event:s.event;
-  this.map=new s.Map(container,{center:this.coord(options.center),zoom:options.zoom,zoomControl:true,...(this.provider==='google'?{mapTypeControl:false,streetViewControl:false,fullscreenControl:false}:{scaleControl:false})});
-  this.setZoomControlPosition(options.zoomControlPosition||'topleft');
+  // No built-in buttons (zoom, map type, street view, fullscreen); pinch/wheel/double-click zoom still work.
+  this.map=new s.Map(container,{center:this.coord(options.center),zoom:options.zoom,zoomControl:false,...(this.provider==='google'?{disableDefaultUI:true,mapTypeControl:false,streetViewControl:false,fullscreenControl:false}:{scaleControl:false,mapTypeControl:false})});
   this.listen('click',ev=>{const p=this.provider==='naver'?ev.coord:ev.latLng;if(p)options.events?.click?.([p.lat(),p.lng()]);});
   this.listen(this.provider==='naver'?'zoom_changed':'zoom_changed',()=>options.events?.zoomStart?.());
   this.listen('dragstart',()=>options.events?.moveStart?.());
@@ -89,7 +89,7 @@ export class SDKEngine {
  hasUsableSize(){return !!this.container?.clientWidth&&!!this.container?.clientHeight;}
  invalidateSize(){if(this.provider==='naver')this.map?.setSize?.(new this.sdk.Size(this.container.clientWidth,this.container.clientHeight));else if(this.map)this.event.trigger(this.map,'resize');}
  setMapStyle(){/* HA MapLibre style cannot be applied to provider cartography; SDK default remains. */}
- setZoomControlPosition(p){const positions=this.provider==='naver'?this.sdk.Position:this.sdk.ControlPosition;const key={topleft:'TOP_LEFT',topright:'TOP_RIGHT',bottomleft:'BOTTOM_LEFT',bottomright:'BOTTOM_RIGHT'}[p]||'TOP_LEFT';this.map?.setOptions({zoomControl:true,zoomControlOptions:{position:positions[key]}});}
+ setZoomControlPosition(){/* Zoom buttons are intentionally hidden on provider maps. */this.map?.setOptions({zoomControl:false});}
  setScaleRuler(o){this.map?.setOptions(this.provider==='naver'?{scaleControl:!!o}:{scaleControl:!!o});}
  setClustering(o){if(o)throw new Error('provider-clustering-unsupported');}
  refreshClusters(){}

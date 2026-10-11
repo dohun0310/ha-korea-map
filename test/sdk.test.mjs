@@ -34,3 +34,9 @@ for(const provider of ['naver','google'])test(`unit ${provider}: adapter creates
  const circle=e.addCircle([38,128],{radius:200,color:'blue'});circle.update([39,129],{radius:300,color:'green'});assert.equal(f.made.at(-1).o.radius,300);
  const path=e.addPath({color:'red',segments:[{points:[[37,127],[38,128]],opacity:.3}],markers:[{location:[37,127],tooltipHtml:'time'}]});path.update({color:'blue',segments:[],markers:[]});path.remove();path.remove();h.remove();circle.remove();e.destroy();assert.equal(e.getView(),undefined);
 });
+for(const provider of ['naver','google'])test(`unit ${provider}: no zoom buttons or other built-in map controls are shown`,async()=>{
+ const {SDKEngine}=await import('../config/www/ha-map-sdk.mjs');const f=sdkFixture(provider),e=new SDKEngine(provider,{key:'unit_public',optIn:true,loader:async()=>f.sdk});
+ await e.init(element(),{center:[37,127],zoom:12,zoomControlPosition:'topright',events:{}});const map=f.made.find(x=>x instanceof f.sdk.Map);
+ assert.equal(map.o.zoomControl,false,'zoom buttons hidden at creation');if(provider==='google')assert.equal(map.o.disableDefaultUI,true);
+ e.setZoomControlPosition('bottomright');assert.equal(map.o.zoomControl,false,'HA asking for a zoom position must not bring the buttons back');e.destroy();
+});
