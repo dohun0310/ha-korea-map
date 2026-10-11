@@ -306,7 +306,7 @@ for (const provider of ["naver", "google"])
     e.destroy();
   });
 for (const provider of ["naver", "google"])
-  test(`unit ${provider}: clustering request is accepted and markers stay individually visible`, async () => {
+  test(`unit ${provider}: clustering leaves a lone unkeyed marker individually visible`, async () => {
     const { SDKEngine } = await import("../config/www/ha-map-sdk.mjs");
     const f = sdkFixture(provider),
       e = new SDKEngine(provider, { key: "unit_public", optIn: true, loader: async () => f.sdk });

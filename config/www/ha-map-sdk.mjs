@@ -1,4 +1,5 @@
 // Official SDKs only. HA tile tokens never reach these loaders or SDK options.
+import { ClusterLayer } from "./ha-map-cluster.mjs?v=auto-5";
 const loads = new Map(),
   failureSets = { naver: new Set(), google: new Set() };
 const authNames = { naver: "navermap_authFailure", google: "gm_authFailure" };
@@ -30,9 +31,6 @@ export function isDarkStyle(style) {
 function hasStyleIds(styleIds) {
   return !!(styleIds?.light || styleIds?.dark);
 }
-// The filter HA itself applies to raster tiles in dark mode (ha-map.ts, --map-filter).
-export const TILE_DARK_FILTER =
-  "invert(0.9) hue-rotate(170deg) brightness(1.5) contrast(1.2) saturate(0.3)";
 function subscribeAuth(provider, fn) {
   const set = failureSets[provider],
     name = authNames[provider];
@@ -123,6 +121,37 @@ export class SDKEngine {
     this.items = new Set();
     this.listeners = [];
     this.dead = false;
+    const timers = config.timers || globalThis;
+    this.clusters = new ClusterLayer({
+      zoom: () => this.map?.getZoom() ?? 0,
+      maxZoom: () => this.maxZoom(),
+      project: (location) => this.project(location),
+      show: (marker) => marker.show(),
+      hide: (marker) => marker.hide(),
+      place: (element, location, { size, anchor }) => {
+        element.style.width = `${size[0]}px`;
+        element.style.height = `${size[1]}px`;
+        return this.placeElement(element, location, { size, anchor });
+      },
+      fit: (points, options) => this.fitBounds(points, options),
+      activeElement: () => this.container?.getRootNode?.()?.activeElement ?? null,
+      setTimeout: (fn, ms) => timers.setTimeout(fn, ms),
+      clearTimeout: (id) => timers.clearTimeout(id),
+    });
+  }
+  // NAVER documents getMaxZoom(); Google has none unless maxZoom was set, and its imagery
+  // tops out around 21-22 depending on the place.
+  maxZoom() {
+    if (typeof this.map?.getMaxZoom === "function") return this.map.getMaxZoom();
+    return this.map?.get?.("maxZoom") ?? 21;
+  }
+  // Pixels of a location at the current zoom, from the SDK's own projection.
+  project(location) {
+    const projection = this.projector?.getProjection();
+    if (!projection) return undefined;
+    return this.provider === "naver"
+      ? projection.fromCoordToOffset(this.coord(location))
+      : projection.fromLatLngToDivPixel(this.coord(location));
   }
   async init(container, options) {
     if (!this.config.optIn || !this.config.key) throw new Error("provider-not-enabled");
@@ -162,14 +191,24 @@ export class SDKEngine {
             ...(styleId ? { gl: true, customStyleId: styleId } : {}),
           }),
     });
-    this.applyTileFilter();
-    // NAVER may rebuild its tile layer; keep the filter on whatever layer is current.
-    if (this.provider === "naver") this.listen("tilesloaded", () => this.applyTileFilter());
     this.listen("click", (ev) => {
       const p = this.provider === "naver" ? ev.coord : ev.latLng;
       if (p) options.events?.click?.([p.lat(), p.lng()]);
     });
-    this.listen("zoom_changed", () => options.events?.zoomStart?.());
+    this.listen("zoom_changed", () => {
+      options.events?.zoomStart?.();
+      this.clusters.cameraChanged();
+    });
+    // Groups depend on screen distances: regroup once the camera rests at a new zoom.
+    this.listen("idle", () => this.clusters.cameraChanged());
+    // An empty overlay that only lends its projection to the grouping (screen pixels).
+    class Projector extends s.OverlayView {
+      onAdd() {}
+      draw() {}
+      onRemove() {}
+    }
+    this.projector = new Projector();
+    this.projector.setMap(this.map);
     this.listen("dragstart", () => options.events?.moveStart?.());
     // A script load isn't proof of geography: wait for SDK tilesloaded event.
     await new Promise((resolve, reject) => {
@@ -195,22 +234,6 @@ export class SDKEngine {
   styleId(dark) {
     return this.provider === "naver" ? this.config.styleIds?.[dark ? "dark" : "light"] : undefined;
   }
-  // NAVER has no built-in dark map without a Style Editor id. Then the tile layer alone gets
-  // HA's raster dark filter: the overlay panes (markers, circles, paths) and the controls
-  // (logo, scale, attribution) are left untouched. The tile layer is found as the sibling of
-  // NAVER's documented overlay panes; anything holding a link or text is skipped.
-  applyTileFilter() {
-    if (this.provider !== "naver" || !this.map?.getPanes) return;
-    const panes = Object.values(this.map.getPanes() || {});
-    const parent = panes[0]?.parentNode;
-    if (!parent?.children) return;
-    const filter = this.dark && !this.styleId(this.drawnDark) ? TILE_DARK_FILTER : "";
-    for (const layer of [...parent.children]) {
-      if (panes.includes(layer)) continue;
-      if (layer.querySelector?.("a") || (layer.textContent || "").trim()) continue;
-      if (filter || layer.style.filter) layer.style.filter = filter;
-    }
-  }
   listen(name, fn) {
     const h = this.event.addListener(this.map, name, fn);
     this.listeners.push(h);
@@ -231,19 +254,70 @@ export class SDKEngine {
     };
     return handle;
   }
-  addMarker(element, location, options = {}) {
+  // Puts an element on the map at a location through an SDK OverlayView. The element is moved
+  // into a positioned wrapper; remove() takes the wrapper off the map and gives the element back
+  // detached. Used for HA's markers and HA's cluster icons.
+  placeElement(
+    element,
+    location,
+    { size = [0, 0], anchor, interactive = true, raised = false } = {},
+  ) {
     const engine = this,
       s = this.sdk,
       wrapper = this.container.ownerDocument.createElement("div"),
-      size = options.size || [0, 0],
-      anchor = options.anchor || [size[0] / 2, size[1] / 2];
+      [ax, ay] = anchor || [size[0] / 2, size[1] / 2];
     Object.assign(wrapper.style, {
       position: "absolute",
       width: `${size[0]}px`,
       height: `${size[1]}px`,
-      pointerEvents: options.interactive === false ? "none" : "auto",
-      zIndex: options.raised ? "100" : "1",
+      pointerEvents: interactive ? "auto" : "none",
+      zIndex: raised ? "100" : "1",
     });
+    // Clicks on markers and icons must not reach the map (HA treats map clicks separately).
+    const stop = (ev) => ev.stopPropagation();
+    for (const name of ["click", "dblclick", "pointerdown"]) wrapper.addEventListener(name, stop);
+    class DOMOverlay extends s.OverlayView {
+      onAdd() {
+        const panes = this.getPanes();
+        (!interactive
+          ? panes.overlayLayer
+          : engine.provider === "naver"
+            ? panes.overlayImage
+            : panes.overlayMouseTarget
+        ).appendChild(wrapper);
+        wrapper.appendChild(element);
+        if (engine.provider === "google") s.OverlayView.preventMapHitsAndGesturesFrom?.(wrapper);
+      }
+      draw() {
+        const projection = this.getProjection();
+        if (!projection) return;
+        const point =
+          engine.provider === "naver"
+            ? projection.fromCoordToOffset(engine.coord(location))
+            : projection.fromLatLngToDivPixel(engine.coord(location));
+        if (point) {
+          wrapper.style.left = `${point.x - ax}px`;
+          wrapper.style.top = `${point.y - ay}px`;
+        }
+      }
+      onRemove() {
+        if (element.parentNode === wrapper) element.remove();
+        wrapper.remove();
+      }
+    }
+    const overlay = new DOMOverlay();
+    overlay.setMap(this.map);
+    return {
+      wrapper,
+      remove() {
+        overlay.setMap(null);
+        for (const name of ["click", "dblclick", "pointerdown"])
+          wrapper.removeEventListener(name, stop);
+      },
+    };
+  }
+  addMarker(element, location, options = {}) {
+    const size = options.size || [0, 0];
     const owned = [],
       savedSize = { width: element.style.width, height: element.style.height };
     element.style.width = `${size[0]}px`;
@@ -267,53 +341,47 @@ export class SDKEngine {
         if (element.style[name] === `${size[name === "width" ? 0 : 1]}px`)
           element.style[name] = value || "";
     };
-    const stop = (ev) => ev.stopPropagation();
-    for (const name of ["click", "dblclick", "pointerdown"]) wrapper.addEventListener(name, stop);
-    class DOMOverlay extends s.OverlayView {
-      onAdd() {
-        const panes = this.getPanes();
-        (options.interactive === false
-          ? panes.overlayLayer
-          : engine.provider === "naver"
-            ? panes.overlayImage
-            : panes.overlayMouseTarget
-        ).appendChild(wrapper);
-        wrapper.appendChild(element);
-        if (engine.provider === "google") s.OverlayView.preventMapHitsAndGesturesFrom?.(wrapper);
-      }
-      draw() {
-        const projection = this.getProjection();
-        if (!projection) return;
-        const point =
-          engine.provider === "naver"
-            ? projection.fromCoordToOffset(engine.coord(location))
-            : projection.fromLatLngToDivPixel(engine.coord(location));
-        if (point) {
-          wrapper.style.left = `${point.x - anchor[0]}px`;
-          wrapper.style.top = `${point.y - anchor[1]}px`;
-        }
-      }
-      onRemove() {
-        if (element.parentNode === wrapper) element.remove();
-        wrapper.remove();
-      }
-    }
-    const overlay = new DOMOverlay();
-    overlay.setMap(this.map);
-    const decoration = options.decoration
-      ? this.addCircle(location, options.decoration)
-      : undefined;
-    return this.tracked({
+    // Grouping only hides the wrapper (display: none) and the accuracy circle; HA's element
+    // stays where it is and is never destroyed.
+    let placed, decoration;
+    const marker = {
+      element,
+      location,
+      options,
+      show: () => {
+        if (!placed)
+          placed = this.placeElement(element, location, {
+            size,
+            anchor: options.anchor,
+            interactive: options.interactive !== false,
+            raised: options.raised,
+          });
+        placed.wrapper.style.display = "";
+        if (options.decoration && !decoration)
+          decoration = this.addCircle(location, options.decoration);
+      },
+      hide: () => {
+        if (placed) placed.wrapper.style.display = "none";
+        decoration?.remove();
+        decoration = undefined;
+      },
+    };
+    marker.handle = this.tracked({
       location,
       clusterData: options.clusterData,
-      remove() {
-        overlay.setMap(null);
+      remove: () => {
+        this.clusters.remove(marker);
+        placed?.remove();
+        placed = undefined;
         cleanup();
         decoration?.remove();
-        for (const name of ["click", "dblclick", "pointerdown"])
-          wrapper.removeEventListener(name, stop);
+        decoration = undefined;
       },
     });
+    this.clusters.add(marker);
+    // Clusterable markers appear on the next setClustering call (MapEngine contract).
+    if (!options.cluster) marker.show();
+    return marker.handle;
   }
   circleOptions(center, o) {
     return {
@@ -459,10 +527,8 @@ export class SDKEngine {
       this.provider === "google" ||
       this.styleId(true) !== undefined ||
       this.styleId(false) !== undefined;
-    if (!recreate) {
-      this.applyTileFilter();
-      return;
-    }
+    // Without published NAVER style IDs retain the unmodified default map.
+    if (!recreate) return;
     if (this.dark === this.drawnDark || this.restyleRequested === this.dark) return;
     this.restyleRequested = this.dark;
     this.config.onRestyle?.();
@@ -476,20 +542,29 @@ export class SDKEngine {
   setScaleRuler(o) {
     this.map?.setOptions({ scaleControl: !!o });
   }
-  // Grouping is accepted but not drawn yet: every marker stays individually visible.
+  // HA supplies its iconBuilder, screen-distance radius and optional zone grouping key.
   setClustering(o) {
-    this.clustering = o || null;
+    if (!this.map) {
+      this.clusters.options = o || null;
+      return;
+    }
+    this.clusters.setOptions(o);
   }
   clusterMode() {
-    return this.clustering ? "individual-markers" : "off";
+    return this.clusters.enabled() ? "grouped" : "off";
   }
-  refreshClusters() {}
+  refreshClusters() {
+    if (this.map) this.clusters.refresh();
+  }
   destroy() {
     if (this.dead) return;
     this.dead = true;
     this.cancelInit?.();
     this.offAuth?.();
+    this.clusters.destroy();
     for (const h of [...this.items]) h.remove();
+    this.projector?.setMap(null);
+    this.projector = undefined;
     for (const h of this.listeners) this.event?.removeListener(h);
     this.listeners = [];
     if (this.map) {

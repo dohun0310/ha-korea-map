@@ -216,8 +216,8 @@ export class MapRouter {
       pending: this.pending.size,
       reason: this.reason || null,
       clustering: !!this.settings.clustering,
-      // How the current engine draws HA's groups: "native" (HA engine), "individual-markers"
-      // (provider map shows every marker on its own) or "off".
+      // How the current engine draws HA's groups: "native" (HA engine), "grouped"
+      // (provider engine groups markers itself, see ha-map-cluster.mjs) or "off".
       clusterRendering: this.settings.clustering
         ? (this.current?.engine.clusterMode?.() ?? "native")
         : "off",

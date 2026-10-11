@@ -1,7 +1,7 @@
 // Dark/light map style on provider maps. SDK objects are unit fakes, NOT live SDKs.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { SDKEngine, isDarkStyle, sdkURL, TILE_DARK_FILTER } from "../config/www/ha-map-sdk.mjs";
+import { SDKEngine, isDarkStyle, sdkURL } from "../config/www/ha-map-sdk.mjs";
 import { MapRouter } from "../config/www/ha-map-router.mjs";
 import { makeEngine } from "./fixtures.mjs";
 
@@ -43,37 +43,19 @@ test("google: a theme change asks for a rebuild once, because colorScheme is cre
   engine.destroy();
 });
 
-test("naver: dark mode filters only the tile layer, never overlays, logo or attribution", async () => {
+test("naver: absent style IDs keep the default map untouched in both modes", async () => {
   let restyles = 0;
   const { engine, map } = await makeEngine(SDKEngine, "naver", {
     options: { mapStyle: DARK },
     config: { onRestyle: () => restyles++ },
   });
-  assert.equal(map.tilePane.style.filter, TILE_DARK_FILTER);
-  for (const pane of Object.values(map.panes)) assert.equal(pane.style.filter, undefined);
-  assert.equal(map.controls.style.filter, undefined);
-  assert.equal(map.el.style.filter, undefined);
+  assert.equal(map.o.customStyleId, undefined);
+  assert.equal(map.o.gl, undefined);
   engine.setMapStyle(LIGHT);
-  assert.equal(map.tilePane.style.filter, "");
   engine.setMapStyle(DARK);
-  assert.equal(map.tilePane.style.filter, TILE_DARK_FILTER);
-  assert.equal(restyles, 0, "the filter changes at runtime without a rebuild");
-  engine.destroy();
-});
-
-test("naver: a sibling holding a link or text is never filtered", async () => {
-  const { engine, map, doc } = await makeEngine(SDKEngine, "naver", {
-    options: { mapStyle: LIGHT },
-  });
-  const link = doc.createElement("div");
-  link.append(doc.createElement("a"));
-  const text = doc.createElement("div");
-  text.textContent = "© NAVER Corp.";
-  map.paneParent.append(link, text);
-  engine.setMapStyle(DARK);
-  assert.equal(link.style.filter, undefined);
-  assert.equal(text.style.filter, undefined);
-  assert.equal(map.tilePane.style.filter, TILE_DARK_FILTER);
+  for (const el of [map.tilePane, map.controls, map.el, ...Object.values(map.panes)])
+    assert.equal(el.style.filter, undefined, "no CSS filter touches provider DOM");
+  assert.equal(restyles, 0);
   engine.destroy();
 });
 
@@ -94,6 +76,21 @@ test("naver: optional Style Editor ids use the GL submodule and rebuild on a the
   assert.equal(url.searchParams.get("submodules"), "gl");
   assert.equal(url.searchParams.get("callback"), "unitCallback");
   assert.equal(new URL(sdkURL("naver", "unit_public", "x")).searchParams.has("submodules"), false);
+});
+
+test("naver: light style and a missing mode each pass only their own official options", async () => {
+  for (const [style, styleIds, expected] of [
+    [LIGHT, { light: "unit-light-style", dark: "unit-dark-style" }, "unit-light-style"],
+    [DARK, { light: "unit-light-style" }, undefined],
+  ]) {
+    const { engine, map } = await makeEngine(SDKEngine, "naver", {
+      options: { mapStyle: style }, config: { styleIds },
+    });
+    assert.equal(map.o.customStyleId, expected);
+    assert.equal(map.o.gl, expected ? true : undefined);
+    assert.equal(map.tilePane.style.filter, undefined);
+    engine.destroy();
+  }
 });
 
 function stubEngine(name, log) {
@@ -123,6 +120,42 @@ function stubEngine(name, log) {
     refreshClusters() {},
   };
 }
+
+test("router does not commit a stale theme when light returns during a dark rebuild", async () => {
+  let release;
+  let entered;
+  const waiting = new Promise((resolve) => { entered = resolve; });
+  const gate = new Promise((resolve) => { release = resolve; });
+  let builds = 0;
+  const r = new MapRouter({
+    nativeFactory: async () => stubEngine("native", []),
+    providerFactory: (name, onFailure, onRestyle) => {
+      const engine = stubEngine(name, []);
+      const init = engine.init;
+      const build = ++builds;
+      engine.init = async (container, options) => {
+        await init.call(engine, container, options);
+        if (build === 2) { entered(); await gate; }
+      };
+      engine.setMapStyle = (style) => {
+        if (style.palette !== engine.options.mapStyle.palette) onRestyle();
+      };
+      return engine;
+    },
+  });
+  await r.init(stubContainer(), { center: [37, 127], zoom: 10, mapStyle: LIGHT, events: {} });
+  await r.select("google");
+  r.setMapStyle(DARK);
+  await waiting;
+  r.setMapStyle(LIGHT);
+  release();
+  for (let i = 0; i < 30; i++) await Promise.resolve();
+  assert.equal(r.current.engine.options.mapStyle.palette, LIGHT.palette);
+  assert.equal(r.current.engine.dead, false);
+  assert.equal(r.diagnostics().pending, 0);
+  assert.equal(r.diagnostics().safeMode, false);
+  r.destroy();
+});
 
 function stubContainer() {
   const el = {
