@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Generate pinned browser config from allowlisted browser-restricted public keys.
+"""Generate browser config from allowlisted browser-restricted public keys.
 Never source an env file or pass server secrets to Home Assistant /local.
 """
 import argparse, hashlib, json, os, pathlib, re, stat, sys, tempfile
 ROOT=pathlib.Path(__file__).resolve().parent
+# Legacy diagnostic reference only; not emitted or required for installation.
 PIN={'coreVersion':'2026.10.1','frontendVersion':'20260930.3','entrypoints':['/frontend_latest/core.ecb6c9be4886db2c.js','/frontend_latest/app.6234b2ff06eb162a.js'],'evidence':'container frontend manifest + rendered /map/0 HTML; active resource check at runtime'}
 NAMES={'naver':'NAVER_MAP_KEY_ID','google':'GOOGLE_MAPS_API_KEY'}
 def read_keys(path):
@@ -35,7 +36,7 @@ def main():
   for value in styles.values():
    if not re.fullmatch(r'[A-Za-z0-9_-]{4,128}',value):raise ValueError('invalid-style-id')
   if styles and 'naver' in providers:providers['naver']['styleIds']=styles
-  cfg={'mode':'native' if a.provider=='native' else 'official','provider':a.provider,'providers':providers,'pin':PIN}
+  cfg={'mode':'native' if a.provider=='native' else 'official','provider':a.provider,'providers':providers}
   if a.provider=='auto' and a.boundary_url:
    if not re.fullmatch(r'/[A-Za-z0-9_./-]+\.geojson',a.boundary_url):raise ValueError('invalid-boundary-url')
    if not a.boundary_file.is_file():raise ValueError('boundary-file-missing')

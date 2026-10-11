@@ -23,17 +23,19 @@ ha-korea-map은 Home Assistant(HA) 기본 지도(`/map`)에서 배경 지도를 
   - Google 지도는 공식 옵션인 `colorScheme`을 사용합니다. 이 옵션은 지도를 만들 때만 지정할 수 있으므로, 테마가 바뀌면 지도를 새로 만듭니다.
   - NAVER 지도는 Style Editor에서 발행한 라이트·다크 스타일 ID를 설정하면 공식 GL 스타일(`customStyleId`)을 사용합니다. ID를 설정하지 않은 모드에서는 NAVER 기본 지도를 그대로 사용합니다. CSS 필터는 사용하지 않으며 로고와 저작권 표시도 바꾸지 않습니다.
 - SDK를 불러오지 못하거나 인증에 실패하면 HA 원래 지도로 자동 복구합니다.
-- 지원하는 HA 버전이 아니면 아무것도 바꾸지 않고 원래 지도를 그대로 둡니다.
+- HA Core·Frontend 버전이나 빌드 해시가 바뀌어도 지도를 적용하려고 시도합니다. 필요한 내부 메서드가 없어지면 원래 지도를 유지합니다.
 - 대한민국 판정에는 출처가 분명한 공개 경계 데이터를 사용합니다. 제주도, 마라도, 울릉도, 독도, 백령도를 포함하고 쓰시마와 북한은 제외합니다. 자세한 내용은 [data/README.md](data/README.md)에 정리했습니다.
 
-## 지원 버전
+## 검증 당시 버전
 
 | 항목 | 버전 |
 |---|---|
 | Home Assistant Core | 2026.10.1 |
 | Frontend | 20260930.3 |
 
-이 확장은 HA 내부 지도 엔진을 교체하는 방식으로 동작하므로 공개 API가 아닌 부분에 의존합니다. HA를 업데이트하면 확장은 스스로 동작을 멈추고 원래 지도를 표시합니다. 새 버전에서 다시 검증한 다음 버전 값을 갱신해야 합니다.
+위 버전은 기존 실제 화면 검증 당시 환경이며 설치 허용목록이 아닙니다. Core·Frontend 버전이나 entrypoint 해시가 바뀌어도 확장은 적용을 시도합니다. 이전 설정의 `pin`은 선택적인 진단 정보로만 사용하며 새 설정에는 필요하지 않습니다. 실제 `home-assistant.hass`와 `ha-map`이 준비되면 버전 문자열 없이도 설치합니다.
+
+이 확장은 공개 API가 아닌 HA 내부 지도 메서드에 의존하므로 미래 모든 HA에서 정상 동작한다고 보장하지 않습니다. 필요한 메서드가 없어지거나 호환되지 않으면 원래 지도를 유지하며, SDK 실패 복구와 화면 소유권 검사도 계속 적용합니다.
 
 ## 설치
 
@@ -41,7 +43,7 @@ ha-korea-map은 Home Assistant(HA) 기본 지도(`/map`)에서 배경 지도를 
 
 1. HACS에서 이 저장소를 Dashboard 유형의 사용자 지정 저장소로 추가하고 내려받습니다. HACS를 사용하지 않는다면 `dist/` 폴더에 있는 파일을 HA의 `/config/www/ha-korea-map/`에 복사합니다.
 2. `generate-provider-config.py`로 키 설정 파일 `/config/www/ha-korea-map-config.mjs`를 만듭니다. 이 파일은 패키지 폴더 밖에 있으므로 HACS로 업데이트해도 덮어쓰지 않습니다. 키는 저장소에 넣지 않습니다.
-3. `configuration.yaml`에 있는 `frontend.extra_module_url`에 `/hacsfiles/ha-korea-map/ha-korea-map.js?v=auto-5`를 추가하고 HA를 재시작합니다. 파일을 직접 복사했다면 `/local/ha-korea-map/ha-korea-map.js?v=auto-5`를 추가합니다.
+3. `configuration.yaml`에 있는 `frontend.extra_module_url`에 `/hacsfiles/ha-korea-map/ha-korea-map.js?v=auto-6`를 추가하고 HA를 재시작합니다. 파일을 직접 복사했다면 `/local/ha-korea-map/ha-korea-map.js?v=auto-6`를 추가합니다.
 
 HACS가 자동으로 등록하는 대시보드 리소스만으로도 동작할 수 있습니다. 다만 대시보드 리소스는 `extra_module_url`보다 늦게 불러오기 시작하므로, 첫 지도가 HA 원래 지도로 만들어질 가능성이 더 높습니다. 그래서 `extra_module_url` 등록을 권장합니다. 두 방법을 함께 등록해도 확장은 한 번만 설치됩니다.
 

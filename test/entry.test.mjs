@@ -11,16 +11,16 @@ test("HACS path: boundary resolves next to the module, config stays in /local ou
   const urls = packageUrls(`${ORIGIN}/hacsfiles/ha-korea-map/ha-korea-map.js?hacstag=12345`);
   assert.equal(
     urls.boundary,
-    `${ORIGIN}/hacsfiles/ha-korea-map/ha-map-korea-boundary.geojson?v=auto-5`,
+    `${ORIGIN}/hacsfiles/ha-korea-map/ha-map-korea-boundary.geojson?v=auto-6`,
   );
   assert.equal(urls.config, `${ORIGIN}/local/ha-korea-map-config.mjs`);
 });
 
 test("manual path: /local/ha-korea-map/ keeps working", () => {
-  const urls = packageUrls(`${ORIGIN}/local/ha-korea-map/ha-korea-map.js?v=auto-5`);
+  const urls = packageUrls(`${ORIGIN}/local/ha-korea-map/ha-korea-map.js?v=auto-6`);
   assert.equal(
     urls.boundary,
-    `${ORIGIN}/local/ha-korea-map/ha-map-korea-boundary.geojson?v=auto-5`,
+    `${ORIGIN}/local/ha-korea-map/ha-map-korea-boundary.geojson?v=auto-6`,
   );
   assert.equal(urls.config, `${ORIGIN}/local/ha-korea-map-config.mjs`);
 });
@@ -39,7 +39,7 @@ test("bootstrap fills in the packaged boundary and starts once per page", async 
   const moduleUrl = `${ORIGIN}/hacsfiles/ha-korea-map/ha-korea-map.js?hacstag=1`;
   const first = bootstrap({ moduleUrl, scope, importConfig, start });
   const second = bootstrap({
-    moduleUrl: `${ORIGIN}/local/ha-korea-map/ha-korea-map.js?v=auto-5`,
+    moduleUrl: `${ORIGIN}/local/ha-korea-map/ha-korea-map.js?v=auto-6`,
     scope,
     importConfig,
     start,
@@ -49,7 +49,7 @@ test("bootstrap fills in the packaged boundary and starts once per page", async 
   assert.equal(starts.length, 1);
   assert.equal(
     starts[0].boundary.url,
-    `${ORIGIN}/hacsfiles/ha-korea-map/ha-map-korea-boundary.geojson?v=auto-5`,
+    `${ORIGIN}/hacsfiles/ha-korea-map/ha-map-korea-boundary.geojson?v=auto-6`,
   );
   assert.equal(scope.haMapExtension.installed, true);
 });

@@ -1,5 +1,5 @@
 // Official SDKs only. HA tile tokens never reach these loaders or SDK options.
-import { ClusterLayer } from "./ha-map-cluster.mjs?v=auto-5";
+import { ClusterLayer } from "./ha-map-cluster.mjs?v=auto-6";
 const loads = new Map(),
   failureSets = { naver: new Set(), google: new Set() };
 const authNames = { naver: "navermap_authFailure", google: "gm_authFailure" };

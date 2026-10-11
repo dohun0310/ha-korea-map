@@ -2,30 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as extension from "../config/www/ha-map-extension.mjs";
 const { installHook, ownsDefaultPanel } = extension;
-import { existsSync } from "node:fs";
-// The generated lab config holds browser keys and is never committed; its check runs only where it exists.
-const labConfigUrl = new URL("../config/www/ha-map-lab-config.mjs", import.meta.url);
-const labConfig = existsSync(labConfigUrl) ? (await import(labConfigUrl.href)).labConfig : null;
-if (labConfig) await import("../config/www/ha-map-lab-bootstrap.mjs");
-test(
-  "deployed lab configuration is native or explicitly opted-in official with known pins",
-  { skip: !labConfig && "generated lab config absent (not committed)" },
-  () => {
-    assert.ok(
-      labConfig.mode === "native" ||
-        (labConfig.mode === "official" &&
-          ["naver", "google"].includes(labConfig.provider) &&
-          labConfig.providers[labConfig.provider]?.optIn === true) ||
-        (labConfig.mode === "official" &&
-          labConfig.provider === "auto" &&
-          labConfig.providers.naver?.optIn === true &&
-          labConfig.providers.google?.optIn === true &&
-          /^\/local\/ha-map-korea-boundary\.geojson\?v=/.test(labConfig.boundary?.url)),
-    );
-    assert.equal(labConfig.pin.coreVersion, "2026.10.1");
-    assert.equal(labConfig.pin.frontendVersion, "20260930.3");
-  },
-);
+// Tests use synthetic configuration only; never import key-bearing lab configuration.
 test("auto provider requires both opted-in keys plus boundary and manual select disables auto", async () => {
   const both = {
     naver: { key: "unit-public-naver", optIn: true },
@@ -165,7 +142,7 @@ function autoEnvironment(coreVersion = "2026.10.1") {
     location: { origin, pathname: "/map/0" },
   };
 }
-test("auto hook polls for real hass version then installs explicit lab mock", async () => {
+test("auto hook polls for real hass then installs explicit lab mock", async () => {
   assert.equal(typeof extension.startAutoHook, "function");
   const env = autoEnvironment(null);
   let waits = 0;
@@ -217,7 +194,7 @@ test("auto hook reports which shape check failed when it never matches", async (
     sleep: async () => {},
   });
   assert.equal(ctl.installed, false);
-  assert.match(ctl.reason, /unknown version\/method shape: .*_loadMap/);
+  assert.match(ctl.reason, /unsupported method shape: .*_loadMap/);
 });
 test("auto hook times out without modifying prototype and ignores late definition", async () => {
   assert.equal(typeof extension.startAutoHook, "function");
@@ -248,22 +225,100 @@ test("auto hook times out without modifying prototype and ignores late definitio
   await Promise.resolve();
   assert.equal(env.C.prototype._createEngine, old);
 });
-test("auto hook rejects unknown core and mismatched active frontend", async () => {
-  assert.equal(typeof extension.startAutoHook, "function");
-  for (const env of [
-    autoEnvironment("2026.11.0"),
-    { ...autoEnvironment(), performance: { getEntriesByType: () => [] } },
+test("auto hook installs after updates despite stale pins and changed or mixed hashes", async () => {
+  for (const active of [
+    [],
+    [{ name: origin + "/frontend_latest/core.updated.js" }],
+    [...resources, { name: origin + "/frontend_latest/app.updated.js" }],
   ]) {
+    const env = autoEnvironment("2026.11.0");
+    env.performance = { getEntriesByType: () => active };
     const old = env.C.prototype._createEngine;
     const ctl = await extension.startAutoHook({
       ...env,
-      config: { pin },
+      config: { pin, mode: "mock" },
       maxAttempts: 1,
       sleep: async () => {},
     });
-    assert.equal(ctl.installed, false);
-    assert.equal(env.C.prototype._createEngine, old);
+    assert.equal(ctl.installed, true);
+    assert.notEqual(env.C.prototype._createEngine, old);
+    assert.equal(ctl.evidence.coreVersion, "2026.11.0");
+    assert.equal(
+      ctl.evidence.frontendVersion,
+      undefined,
+      "do not label changed builds with the legacy version",
+    );
+    const map = new env.C();
+    map.parentNode = dashboard();
+    assert.equal((await map._createEngine()).labAdapter, "mock");
+    ctl.uninstall();
   }
+});
+test("auto hook installs without pins, resources or a hass version", async () => {
+  const env = autoEnvironment(null);
+  env.app.hass = {};
+  env.document.querySelectorAll = () => [];
+  env.performance = { getEntriesByType: () => [] };
+  const ctl = await extension.startAutoHook({
+    ...env,
+    config: { mode: "mock" },
+    maxAttempts: 1,
+    sleep: async () => {},
+  });
+  assert.equal(ctl.installed, true);
+  assert.equal(ctl.evidence.coreVersion, undefined);
+  assert.equal(ctl.evidence.frontendVersion, undefined);
+  assert.deepEqual(ctl.evidence.entrypoints, []);
+  ctl.uninstall();
+});
+test("updated auto startup creates the official auto router with both opted-in keys", async () => {
+  const env = autoEnvironment("next-core");
+  env.document.querySelectorAll = () => [];
+  env.performance = { getEntriesByType: () => [] };
+  const ctl = await extension.startAutoHook({
+    ...env,
+    config: {
+      mode: "official",
+      provider: "auto",
+      providers: {
+        naver: { key: "unit-public-naver", optIn: true },
+        google: { key: "unit-public-google", optIn: true },
+      },
+      boundary: { url: "/local/unit-boundary.geojson" },
+    },
+    maxAttempts: 1,
+    sleep: async () => {},
+  });
+  assert.equal(ctl.installed, true);
+  const map = new env.C();
+  map.parentNode = dashboard();
+  const engine = await map._createEngine();
+  assert.equal(typeof engine.choose, "function");
+  assert.equal(engine.desired, "auto");
+  assert.equal(ctl.diagnostics().routers[0].auto, true);
+  engine.destroy();
+  ctl.uninstall();
+});
+test("auto hook treats unavailable build diagnostics as best effort", async () => {
+  const env = autoEnvironment("next-core");
+  env.document.querySelectorAll = () => {
+    throw new Error("preloads unavailable");
+  };
+  env.performance = {
+    getEntriesByType: () => {
+      throw new Error("resource timing unavailable");
+    },
+  };
+  const ctl = await extension.startAutoHook({
+    ...env,
+    config: { pin, mode: "mock" },
+    maxAttempts: 1,
+    sleep: async () => {},
+  });
+  assert.equal(ctl.installed, true);
+  assert.equal(ctl.evidence.frontendVersion, undefined);
+  assert.deepEqual(ctl.evidence.entrypoints, []);
+  ctl.uninstall();
 });
 test("auto hook native mode remains the default without opt in", async () => {
   assert.equal(typeof extension.startAutoHook, "function");
@@ -387,11 +442,15 @@ test("legacy panel cannot hide a locations editor ancestor", () =>
     ),
     false,
   ));
-test("unknown core fails closed", () =>
-  assert.equal(
-    installHook(fixture(), { coreVersion: "next", frontendVersion: "20260930.3" }).installed,
-    false,
-  ));
+test("future core and frontend versions do not block installation", () => {
+  const C = fixture();
+  const old = C.prototype._createEngine;
+  const ctl = installHook(C, { coreVersion: "next-core", frontendVersion: "next-frontend" });
+  assert.equal(ctl.installed, true);
+  assert.notEqual(C.prototype._createEngine, old);
+  ctl.uninstall();
+  assert.equal(C.prototype._createEngine, old);
+});
 test("panel ownership excludes editor", () => {
   assert.equal(ownsDefaultPanel({ parentNode: panel }, "/map"), true);
   assert.equal(

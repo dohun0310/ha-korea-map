@@ -16,7 +16,7 @@ Node 단위 테스트에서는 SDK를 흉내 내는 가짜 객체(fake)를 사�
 ## 테스트용 HA
 
 - 컨테이너 이름은 `ha-map-lab`이고, 버전은 Core 2026.10.1, Frontend 20260930.3입니다. LAN 주소는 `<HA 호스트>:18123`입니다.
-- `/map/0` 기본 지도 대시보드에서만 확장이 동작합니다. 다른 대시보드와 편집 화면, `_forceLeaflet`이나 `rasterOnly` 상태, 알 수 없는 빌드에서는 원래 엔진을 그대로 사용합니다.
+- `/map/0` 기본 지도 대시보드에서만 확장이 동작합니다. 다른 대시보드와 편집 화면, `_forceLeaflet`이나 `rasterOnly` 상태, 필요한 메서드가 없는 경우에는 원래 엔진을 그대로 사용합니다. Core·Frontend 버전과 entrypoint 해시가 바뀌어도 적용을 시도하며, 기존 `pin`은 선택적인 진단 정보일 뿐입니다. 미래 HA에서의 정상 동작을 보장하지는 않습니다.
 - `configuration.yaml`에 등록된 `extra_module_url: /local/ha-map-lab-bootstrap.mjs?v=dashboard-2`를 사용합니다. 모듈을 바꿀 때는 bootstrap 안에 있는 import 쿼리만 올리면 되므로 컨테이너를 재시작하지 않아도 됩니다.
 - 이 환경은 개인 위치 대신 합성 좌표를 사용하는 실험 환경입니다. 운영 환경의 라이선스 승인이나 여러 지도 제공자를 함께 쓰는 구성이 약관에 맞는지는 보장하지 않습니다.
 

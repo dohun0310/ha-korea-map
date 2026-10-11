@@ -35,10 +35,10 @@ class DistTests(unittest.TestCase):
         # A root-level ha-korea-map.js would make HACS ignore dist/.
         self.assertFalse((ROOT / 'ha-korea-map.js').exists())
 
-    def test_entry_reads_config_outside_package_and_pins_versions(self):
+    def test_entry_reads_external_config_and_uses_current_cache_version(self):
         text = (DIST / 'ha-korea-map.js').read_text()
         self.assertIn('"/local/ha-korea-map-config.mjs"', text)
-        self.assertIn('./ha-map-extension.mjs?v=auto-5', text)
+        self.assertIn('./ha-map-extension.mjs?v=auto-6', text)
         self.assertNotIn('lab-config', text)
 
     def test_no_keys_or_generated_config_in_package(self):
@@ -59,8 +59,8 @@ class DistTests(unittest.TestCase):
             for spec in re.findall(r'(?:import|from)\s*\(?\s*"(\./[^"]+)"', text):
                 target, sep, query = spec[2:].partition('?')
                 self.assertIn(target, FILES)
-                self.assertEqual(query, 'v=auto-5')
-        self.assertEqual(versions, {'auto-5'})
+                self.assertEqual(query, 'v=auto-6')
+        self.assertEqual(versions, {'auto-6'})
         bootstrap = (ROOT / 'config/www/ha-map-lab-bootstrap.mjs').read_text()
         self.assertEqual(set(re.findall(r'\?v=(auto-\d+)', bootstrap)), versions)
 
@@ -72,7 +72,7 @@ class DistTests(unittest.TestCase):
         self.assertTrue((DIST / 'ATTRIBUTION.md').exists())
         guide = (ROOT / 'docs' / 'INSTALL.md').read_text()
         for needle in ['HACS', '/hacsfiles/ha-korea-map/ha-korea-map.js', 'extra_module_url',
-                       '/local/ha-korea-map/ha-korea-map.js?v=auto-5', '/config/www/ha-korea-map-config.mjs',
+                       '/local/ha-korea-map/ha-korea-map.js?v=auto-6', '/config/www/ha-korea-map-config.mjs',
                        'HTTP 리퍼러', '3.2.3(e)', 'CC BY 3.0 IGO', 'CC BY 4.0', '롤백', 'pin', '캐시', '--provider auto']:
             self.assertIn(needle, guide)
 

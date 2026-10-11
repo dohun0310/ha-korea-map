@@ -24,6 +24,7 @@ class GeneratorTests(unittest.TestCase):
    self.assertEqual(p.returncode,0,p.stderr);self.assertNotIn('unit_public',p.stdout+p.stderr)
    text=out.read_text();cfg=json.loads(text[text.index('(')+1:text.rindex(')')])
    self.assertEqual((cfg['mode'],cfg['provider']),('official','auto'));self.assertEqual(sorted(cfg['providers']),['google','naver'])
+   self.assertNotIn('pin',cfg,'new configs must not require legacy version pins')
    self.assertTrue(cfg['boundary']['url'].startswith('/local/ha-map/ha-map-korea-boundary.geojson?v='))
    p=subprocess.run(['python3',str(script),'--keys',str(keys),'--output',str(out),'--provider','auto'],capture_output=True,text=True)
    self.assertNotEqual(p.returncode,0);self.assertIn('explicit-opt-in-required',p.stderr)

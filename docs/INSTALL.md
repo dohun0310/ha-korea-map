@@ -16,18 +16,14 @@
 - 문제가 생겼을 때는 다음과 같이 동작합니다.
   - SDK를 불러오지 못하거나 인증에 실패하면 HA 원래 지도로 돌아가고 안전 모드로 바뀝니다. 그 페이지에서는 원래 지도를 계속 사용하고, 새로고침하면 다시 시도합니다.
   - 경계 파일을 불러오지 못하면 자동 전환을 끄고 현재 지도를 유지합니다.
-  - HA 버전이나 Frontend 빌드가 고정(pin)된 값과 다르면 아무것도 바꾸지 않고 원래 지도를 사용합니다.
+  - HA 버전과 Frontend 빌드 해시 변경만으로 적용을 중단하지 않습니다. 필요한 내부 메서드가 없거나 메서드 형태가 호환되지 않으면 원래 지도를 유지합니다.
   - 키 설정 파일이 없으면 확장을 설치하지 않고 원래 지도를 사용합니다.
 
-## 0. 버전 확인 (pin)
+## 0. 버전과 진단 정보
 
-1. 설정 → 정보 화면에서 Core가 `2026.10.1`이고 Frontend가 `20260930.3`인지 확인합니다.
-2. 운영 HA가 내려주는 HTML에서 entrypoint 해시가 pin과 같은지 확인합니다.
-   ```sh
-   curl -s http://<운영 HA 주소>:8123/ | grep -oE '/frontend_latest/(core|app)\.[0-9a-f]+\.js' | sort -u
-   # pin: /frontend_latest/core.ecb6c9be4886db2c.js, /frontend_latest/app.6234b2ff06eb162a.js
-   ```
-   값이 다르면 확장은 설치되지 않고 원래 지도가 유지됩니다. 이때는 [HA를 업데이트할 때](#ha를-업데이트할-때) 절차를 따릅니다.
+Core·Frontend 버전이나 entrypoint 해시를 설치 조건으로 검사하지 않습니다. `home-assistant.hass`와 `ha-map`이 준비되고 필요한 메서드를 사용할 수 있으면 새 HA 버전에서도 적용을 시도합니다. hass에 버전 문자열이 없어도 설치합니다.
+
+이전 설정 파일에 있는 `pin`은 선택적인 진단 정보로만 사용하며, 값이 낡았거나 없어도 설치를 막지 않습니다. 새 생성기는 `pin`을 출력하지 않습니다. 실제 리소스 해시를 확인할 수 없거나 기존 pin과 다르면 Frontend 버전을 확인된 값처럼 표시하지 않습니다. 아래에 기록된 검증 버전은 검증 당시 환경이며 지원 허용목록이 아닙니다.
 
 ## 1. API 키 준비와 제한
 
@@ -94,7 +90,7 @@ HA 프런트엔드에 모듈을 불러오는 방법은 두 가지가 있으며, 
 - `frontend.extra_module_url`: HA가 내려주는 HTML 안의 인라인 스크립트가 페이지를 처음 열 때 `import()`로 모듈을 불러옵니다(`src/html/index.html.template`).
 - 대시보드 리소스(HACS가 자동으로 등록하는 방식): Lovelace 패널이 처음 열릴 때 대시보드 설정을 가져오는 작업과 동시에 리소스를 불러오기 시작하며, 리소스가 다 로드되기를 기다리지 않습니다(`src/panels/lovelace/ha-panel-lovelace.ts`).
 
-확장은 `ha-map` 요소가 정의되고 HA 버전 정보가 준비되면 지도 엔진 생성 함수를 감쌉니다. HA는 지도 타일 토큰을 받은 다음에 엔진을 만들기 때문에, 보통은 확장이 먼저 설치됩니다. 하지만 모듈을 늦게 불러오면 첫 지도는 HA 원래 지도로 만들어질 수 있습니다. 이 경우에는 다른 화면으로 이동했다가 `/map`으로 돌아오면 확장이 적용됩니다. 대시보드 리소스 방식은 `extra_module_url` 방식보다 늦게 불러오기 시작하므로 이런 상황이 생길 가능성이 더 높다고 판단합니다. 다만 실제 발생 빈도는 측정하지 않았습니다.
+확장은 `ha-map` 요소가 정의되고 실제 `home-assistant.hass`가 준비되면 지도 엔진 생성 함수를 감쌉니다. 버전 문자열은 필요하지 않습니다. HA는 지도 타일 토큰을 받은 다음에 엔진을 만들기 때문에, 보통은 확장이 먼저 설치됩니다. 하지만 모듈을 늦게 불러오면 첫 지도는 HA 원래 지도로 만들어질 수 있습니다. 이 경우에는 다른 화면으로 이동했다가 `/map`으로 돌아오면 확장이 적용됩니다. 대시보드 리소스 방식은 `extra_module_url` 방식보다 늦게 불러오기 시작하므로 이런 상황이 생길 가능성이 더 높다고 판단합니다. 다만 실제 발생 빈도는 측정하지 않았습니다.
 
 따라서 다음과 같이 `extra_module_url`에 등록하는 방법을 권장합니다.
 
@@ -102,9 +98,9 @@ HA 프런트엔드에 모듈을 불러오는 방법은 두 가지가 있으며, 
 frontend:
   extra_module_url:
     # HACS로 설치한 경우
-    - /hacsfiles/ha-korea-map/ha-korea-map.js?v=auto-5
+    - /hacsfiles/ha-korea-map/ha-korea-map.js?v=auto-6
     # 직접 복사한 경우
-    # - /local/ha-korea-map/ha-korea-map.js?v=auto-5
+    # - /local/ha-korea-map/ha-korea-map.js?v=auto-6
 ```
 
 `extra_module_url`은 HA를 재시작해야 반영됩니다. HACS가 등록한 대시보드 리소스를 그대로 두어도 문제는 없습니다. 같은 모듈이 두 번 실행되더라도 진입 모듈이 이미 시작된 설치 작업을 다시 사용하므로, 엔진 생성 함수를 두 번 감싸지 않습니다.
@@ -134,7 +130,7 @@ HA는 지도 카드의 `theme_mode`(auto, light, dark)와 HA 테마의 다크 �
 
 ## 파일 업데이트
 
-모듈을 바꿀 때는 진입 모듈, `ha-map-extension.mjs`, `ha-map-sdk.mjs`, 테스트용 bootstrap 안에 있는 모든 import 쿼리(`?v=auto-5`)를 함께 올리고 `tools/build_dist.py`로 배포 파일과 체크섬을 다시 만듭니다. 경계 파일 쿼리도 같은 버전을 사용합니다. 새 파일을 모두 복사한 다음 브라우저 캐시를 무시하고 새로고침합니다. `extra_module_url`을 그대로 유지하면 HA를 재시작할 필요는 없지만, 진입 모듈까지 새 파일로 내려받았는지 Network 탭에서 확인해야 합니다. 등록 URL의 쿼리도 바꾸려면 `extra_module_url` 변경을 반영하기 위해 HA를 재시작해야 합니다.
+모듈을 바꿀 때는 진입 모듈, `ha-map-extension.mjs`, `ha-map-sdk.mjs`, 테스트용 bootstrap 안에 있는 모든 import 쿼리(`?v=auto-6`)를 함께 올리고 `tools/build_dist.py`로 배포 파일과 체크섬을 다시 만듭니다. 경계 파일 쿼리도 같은 버전을 사용합니다. 새 파일을 모두 복사한 다음 브라우저 캐시를 무시하고 새로고침합니다. `extra_module_url`을 그대로 유지하면 HA를 재시작할 필요는 없지만, 진입 모듈까지 새 파일로 내려받았는지 Network 탭에서 확인해야 합니다. 등록 URL의 쿼리도 바꾸려면 `extra_module_url` 변경을 반영하기 위해 HA를 재시작해야 합니다.
 
 ## 릴리스 규칙
 
@@ -154,17 +150,15 @@ HACS는 GitHub 릴리스가 있으면 가장 최근 릴리스의 태그 이름�
 
 ## HA를 업데이트할 때
 
-HA를 업데이트하면 Core·Frontend 버전이나 entrypoint 해시가 바뀝니다. 확장은 이 변화를 감지하면 설치되지 않고 원래 지도를 그대로 둡니다. 이때 지도는 정상적으로 보이지만 NAVER와 Google 지도는 나타나지 않습니다. hacs.json에 적은 최소 버전(`homeassistant`)은 설치 가능 여부만 판단하며, 확장이 동작하는 버전은 이 pin 값으로 정해집니다. 다시 사용하려면 다음 순서를 따릅니다.
+HA를 업데이트해도 확장은 Core·Frontend 버전과 entrypoint 해시를 이유로 멈추지 않고 적용을 시도합니다. 기존 키 설정을 다시 생성하거나 `pin`을 갱신할 필요가 없습니다. `hacs.json`의 최소 버전(`homeassistant`)은 HACS 설치 조건이며 런타임 허용목록이 아닙니다.
 
-1. 격리된 테스트용 HA를 새 버전으로 올리고, `ha-map.ts`에 있는 `_createEngine`과 MapEngine 계약이 바뀌었는지 확인합니다. 이 부분은 공개 API가 아니므로 버전마다 바뀔 수 있습니다.
-2. 테스트용 컨테이너에 있는 Frontend manifest와 `/map/0` HTML에서 새 entrypoint(`core.*.js`, `app.*.js`)를 확인합니다.
-3. 다음 위치에 있는 버전 값을 갱신합니다.
-   - `generate-provider-config.py`의 `PIN`(coreVersion, frontendVersion, entrypoints)
-   - `ha-map-extension.mjs`의 `installHook`과 `startAutoHook` 안에 직접 적은 `'2026.10.1'`과 `'20260930.3'`
-4. Node·Python 테스트와 테스트용 HA 브라우저 검증을 통과시킵니다.
-5. import 쿼리(`?v=`)를 올리고 `tools/build_dist.py`로 `dist/`를 다시 만든 다음, 키 설정 파일을 다시 생성합니다.
+HA 내부 메서드와 MapEngine 계약은 공개 API가 아니므로 향후 변경으로 동작이 깨질 수 있습니다. 업데이트 후에는 다음 항목을 확인합니다.
 
-검증하지 않은 상태에서 버전 값만 바꾸는 방법은 권장하지 않습니다.
+1. 새로고침한 뒤 `await haMapExtensionReady`와 `haMapExtension.diagnostics()`에서 설치 여부와 현재 제공자를 확인합니다. 메서드 검사에 실패하면 `reason`에 실패한 메서드가 표시됩니다.
+2. 지도 표시, 마커, 원, 경로, 그룹화, 테마 전환과 SDK 실패 복구를 확인합니다. 가능하면 격리된 테스트용 HA에서 먼저 확인합니다.
+3. 실제 계약이 바뀌었다면 어댑터와 테스트를 수정하고 배포 패키지를 다시 만듭니다. 버전 허용목록을 갱신하는 절차는 필요하지 않습니다.
+
+업데이트 후에도 항상 적용을 시도한다는 뜻이며, 미래 모든 HA에서 정상 동작한다는 보장은 아닙니다.
 
 ## 경계 데이터 출처와 라이선스
 

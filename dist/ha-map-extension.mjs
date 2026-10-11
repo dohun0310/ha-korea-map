@@ -1,7 +1,7 @@
-// Pinned private HA integration; official SDKs are only loaded with key + opt-in.
-import { MapRouter } from "./ha-map-router.mjs?v=auto-5";
-import { SDKEngine } from "./ha-map-sdk.mjs?v=auto-5";
-import { AutoSwitch, loadBoundary } from "./ha-map-auto.mjs?v=auto-5";
+// Version-independent private HA integration; official SDKs need key + opt-in.
+import { MapRouter } from "./ha-map-router.mjs?v=auto-6";
+import { SDKEngine } from "./ha-map-sdk.mjs?v=auto-6";
+import { AutoSwitch, loadBoundary } from "./ha-map-auto.mjs?v=auto-6";
 const installed = new WeakMap();
 export function ownsDefaultPanel(map, path = globalThis.location?.pathname) {
   if (path !== "/map" && path !== "/map/0") return false;
@@ -31,8 +31,7 @@ export function ownsDefaultPanel(map, path = globalThis.location?.pathname) {
 export function installHook(
   C,
   {
-    coreVersion,
-    frontendVersion,
+    // Legacy coreVersion/frontendVersion options are accepted but ignored.
     pathname = () => globalThis.location.pathname,
     mode = "native",
     events = [],
@@ -54,12 +53,10 @@ export function installHook(
       .filter((k) => typeof p?.[k] !== "function")
       .map((k) => k + " missing"),
   ].filter(Boolean);
-  if (coreVersion !== "2026.10.1" || frontendVersion !== "20260930.3")
-    return { installed: false, reason: "unknown version/method shape: version", uninstall() {} };
   if (shape.length)
     return {
       installed: false,
-      reason: "unknown version/method shape: " + shape.join(", "),
+      reason: "unsupported method shape: " + shape.join(", "),
       uninstall() {},
     };
   let enabled = true;
@@ -229,24 +226,30 @@ export async function startAutoHook({
     lastShape;
   const attempt = () => {
     if (finished || result) return;
-    const coreVersion = document.querySelector("home-assistant")?.hass?.config?.version;
-    if (!coreVersion) return;
-    if (coreVersion !== config.pin?.coreVersion || coreVersion !== "2026.10.1") {
-      result = rejected("unknown core version");
-      return;
-    }
+    const hass = document.querySelector("home-assistant")?.hass;
+    if (!hass) return;
+    const coreVersion = hass.config?.version;
     const C = registry.get("ha-map");
     if (!C) return;
-    const frontendVersion = detectFrontendVersion({
-      pin: config.pin,
-      origin: location.origin,
-      preloads: Array.from(document.querySelectorAll('link[rel="modulepreload"]')),
-      resources: performance?.getEntriesByType("resource") || [],
-    });
-    if (!frontendVersion) return;
+    // Legacy build evidence is best effort only, never installation eligibility.
+    let resources = [],
+      frontendVersion;
+    try {
+      resources = Array.from(performance?.getEntriesByType("resource") || []);
+    } catch {
+      // Resource timing can be unavailable; still install the hook.
+    }
+    try {
+      frontendVersion = detectFrontendVersion({
+        pin: config.pin,
+        origin: location.origin,
+        preloads: Array.from(document.querySelectorAll('link[rel="modulepreload"]')),
+        resources,
+      });
+    } catch {
+      // Do not assert a Frontend version when its identity cannot be observed.
+    }
     const r = installHook(C, {
-      coreVersion,
-      frontendVersion,
       pathname: () => location.pathname,
       mode: config.mode || "native",
       events: config.events || [],
@@ -254,12 +257,8 @@ export async function startAutoHook({
       providers: config.providers || {},
       boundary: config.boundary,
     });
-    // A shape mismatch seen once (e.g. during frontend chunk loading) is retried until the poll budget ends.
-    if (
-      !r.installed &&
-      r.reason?.startsWith("unknown version/method shape: ") &&
-      !r.reason.endsWith(": version")
-    ) {
+    // Retry incomplete methods while frontend chunks are still loading.
+    if (!r.installed && r.reason?.startsWith("unsupported method shape: ")) {
       lastShape = r;
       return;
     }
@@ -268,7 +267,18 @@ export async function startAutoHook({
       coreVersion,
       frontendVersion,
       mode: config.mode || "native",
-      entrypoints: [...config.pin.entrypoints],
+      // Report observed resources rather than asserting legacy configured hashes.
+      entrypoints: resources.flatMap((item) => {
+        try {
+          const url = new URL(item.name, location.origin);
+          return url.origin === location.origin &&
+            /^\/frontend_(latest|es5)\/(core|app)\./.test(url.pathname)
+            ? [url.pathname]
+            : [];
+        } catch {
+          return [];
+        }
+      }),
     };
   };
   // Best effort only: this continuation is not proof of pre-first-instance timing.
@@ -286,9 +296,7 @@ export async function startAutoHook({
     await sleep(Math.min(1000, Math.max(0, interval)));
   }
   finished = true;
-  return (
-    result || lastShape || rejected("timed out waiting for hass, ha-map or exact active frontend")
-  );
+  return result || lastShape || rejected("timed out waiting for hass or compatible ha-map methods");
 }
-// Auto startup lives in the explicitly pinned lab bootstrap. Importing this module
+// Auto startup lives in the explicitly configured bootstrap. Importing this module
 // alone is side-effect free so the existing exact-bundle harness remains compatible.
