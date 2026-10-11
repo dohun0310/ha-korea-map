@@ -1,0 +1,21 @@
+{
+  "output": "config/www/ha-map-korea-boundary.geojson",
+  "bytes": 13697,
+  "sha256": "c5722ec0a81f833792a76b68ef699be2d1315081df66b395de1e49707f2cc779",
+  "polygons": 7,
+  "vertices": 673,
+  "area_km2": 157946,
+  "foreign_land_overlap_km2": 0.0,
+  "voronoi_points": 1528,
+  "ne_claim_areas_added": [
+    "Dokdo",
+    "Korean islands under UN jurisdiction"
+  ],
+  "sources_sha256": {
+    "geoBoundaries-CHN-ADM0.geojson": "567c4a547b6318d911b17792d42da3378f3232a2ccfeb07090fdea4ee16c40b7",
+    "geoBoundaries-JPN-ADM0.geojson": "8da994e4c3301fa3f2e51dcbc23025d61225e6c15ed9c85e4a063ebc1cd11af8",
+    "geoBoundaries-KOR-ADM0.geojson": "888b11db665e0c013aa3087cafc58aafd0e48b8069a07d8a74e06e80f67ac88f",
+    "geoBoundaries-PRK-ADM0.geojson": "40e4c5aaedd442333b83137affe7b3845b281e781f16c4b82f6c755f8694266e",
+    "ne_10m_admin_0_disputed_areas.geojson": "9cafef8b7dfb6b164dc58f218f981f4ace9f716f6c03795d4c62d1ac9f3d50f5"
+  }
+}
