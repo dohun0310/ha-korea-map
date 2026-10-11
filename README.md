@@ -11,7 +11,7 @@ Home Assistant 기본 지도(`/map`)의 배경 지도를 지도 중심 위치에
 ## 주요 기능
 
 - NAVER Maps JavaScript API v3와 Google Maps JavaScript API를 공식 SDK로만 불러옵니다. 비공식 타일 주소는 쓰지 않습니다.
-- 지도 오른쪽 위 선택 칸에서 `자동`, `NAVER`, `Google`, `기본 지도` 중 하나를 고를 수 있습니다. 자동일 때는 `자동 (NAVER)`처럼 현재 지도가 함께 표시됩니다.
+- 지도 위에 선택 칸이나 확대·축소 버튼 같은 추가 UI를 띄우지 않습니다. 확대·축소는 손가락, 마우스 휠, 더블클릭으로 할 수 있습니다.
 - SDK 로딩이나 인증이 실패하면 HA 원래 지도로 자동 복구합니다.
 - 지원하는 HA 버전이 아니면 아무것도 바꾸지 않고 원래 지도를 그대로 둡니다.
 - 대한민국 판정에는 출처가 분명한 공개 경계 데이터를 씁니다. 제주도, 마라도, 울릉도, 독도, 백령도를 포함하고 쓰시마와 북한은 제외합니다. 자세한 내용은 [data/README.md](data/README.md)에 있습니다.
@@ -31,12 +31,13 @@ HA 내부 지도 엔진을 교체하는 방식이라 공개 API가 아닌 부분
 
 1. `dist/ha-korea-map/` 파일을 HA의 `/config/www/ha-korea-map/`에 복사합니다.
 2. `generate-provider-config.py`로 키 설정 파일을 만듭니다. 키는 저장소에 넣지 않습니다.
-3. `configuration.yaml`의 `frontend.extra_module_url`에 `/local/ha-korea-map/ha-korea-map.js?v=auto-2`를 추가하고 HA를 재시작합니다.
+3. `configuration.yaml`의 `frontend.extra_module_url`에 `/local/ha-korea-map/ha-korea-map.js?v=auto-3`를 추가하고 HA를 재시작합니다.
 4. `/map` 대시보드의 지도 카드에 `cluster: false`를 넣습니다.
 
 ## 알려진 한계
 
 - NAVER 지도는 SDK 자체가 한국 범위로 고정되어 있습니다. NAVER 지도에서 손으로 끌어서 해외로 나갈 수는 없습니다. 목적지가 정해진 이동(HA 자동 맞춤 등)은 목적지 기준으로 판정해 Google로 전환합니다.
+- SDK 로딩이나 인증이 실패하면 그 페이지에서는 원래 지도를 계속 씁니다. 새로고침하면 다시 시도합니다.
 - 마커 클러스터링은 지원하지 않습니다.
 - SDK 지도에는 HA 지도 스타일(다크 모드 등)이 적용되지 않습니다.
 - 경계는 근사치라서 대한해협, 서해 NLL, 한강 하구 근처에서는 수 km 오차가 있을 수 있습니다.

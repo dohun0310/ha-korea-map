@@ -58,7 +58,7 @@ await window.haMapExtension.recover(); // 기본 지도 안전 모드
 await window.haMapExtension.resume('naver'); // 키/opt-in된 제공자만 가능
 ```
 
-카드 오른쪽 위의 `기본 지도 복구`/`선택 지도 재개` 버튼으로 동일하게 제어할 수 있다. 로고/attribution이 있는 아래쪽은 건드리지 않는다. 실제 지리 타일, marker 클릭으로 more-info, 앵커와 위치, meter-radius 정확도/zone, path segment와 point title, pan/zoom/bounds, 다른 dashboard와 zone editor의 native 유지, DOM teardown을 직접 검증해야 한다. SDK `tilesloaded`만으로 올바른 인증/지도 내용까지 증명된 것으로 간주하지 않는다.
+지도 위 선택 UI는 제거했다(자동 전용). 수동 제어는 개발자 콘솔 API로만 한다. 제공자 지도의 확대·축소 버튼도 숨긴다. 로고/attribution이 있는 아래쪽은 건드리지 않는다. 실제 지리 타일, marker 클릭으로 more-info, 앵커와 위치, meter-radius 정확도/zone, path segment와 point title, pan/zoom/bounds, 다른 dashboard와 zone editor의 native 유지, DOM teardown을 직접 검증해야 한다. SDK `tilesloaded`만으로 올바른 인증/지도 내용까지 증명된 것으로 간주하지 않는다.
 
 SDK timeout/인증 실패/첫 타일 프레임 실패는 안전 모드 native로 복구한다. 기존 native가 건강하면 재초기화하지 않고 유지한다. SDK가 commit된 뒤 실패하면 원래 factory에서 fresh native를 생성해 overlay records를 재생한다. native 원래 renderer마저 실패하면 `native-recovery-failed`로 표시하며 성공을 꾸미지 않는다. 네트워크 script 로드 실패나 키 변경은 전체 reload 후 다시 시도한다 (loader는 같은 document의 단일 키 소유권을 유지한다).
 
