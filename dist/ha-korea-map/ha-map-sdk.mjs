@@ -397,8 +397,12 @@ export class SDKEngine {
   setScaleRuler(o) {
     this.map?.setOptions(this.provider === "naver" ? { scaleControl: !!o } : { scaleControl: !!o });
   }
+  // Grouping is accepted but not drawn yet: every marker stays individually visible.
   setClustering(o) {
-    if (o) throw new Error("provider-clustering-unsupported");
+    this.clustering = o || null;
+  }
+  clusterMode() {
+    return this.clustering ? "individual-markers" : "off";
   }
   refreshClusters() {}
   destroy() {

@@ -47,17 +47,7 @@ export class MapRouter {
   async select(provider) {
     if (this.dead) return false;
     if (!["native", "naver", "google"].includes(provider)) return false;
-    if (
-      provider !== "native" &&
-      (this.safeMode || this.settings.clustering || this.blockClustering)
-    ) {
-      if (this.settings.clustering || this.blockClustering) {
-        this.safeMode = true;
-        this.reason = "clustering-requires-native";
-        this.onStatus?.();
-      }
-      return false;
-    }
+    if (provider !== "native" && this.safeMode) return false;
     const generation = ++this.generation;
     this.cancelPending();
     if (this.current?.provider === provider) return true;
@@ -218,6 +208,12 @@ export class MapRouter {
       records: this.records.size,
       pending: this.pending.size,
       reason: this.reason || null,
+      clustering: !!this.settings.clustering,
+      // How the current engine draws HA's groups: "native" (HA engine), "individual-markers"
+      // (provider map shows every marker on its own) or "off".
+      clusterRendering: this.settings.clustering
+        ? (this.current?.engine.clusterMode?.() ?? "native")
+        : "off",
       ...(this.auto ? this.auto.diagnostics() : { auto: false }),
     };
   }
@@ -258,16 +254,10 @@ export class MapRouter {
   addPath(...a) {
     return this.record("addPath", a);
   }
+  // HA's grouping toggle. Every engine receives the setting; switching engines replays it.
   setClustering(o) {
-    this.blockClustering = !!o;
     this.settings.clustering = o;
-    if (o) {
-      this.safeMode = true;
-      void this.recover("clustering-requires-native").catch(() => {
-        this.reason = "native-recovery-failed";
-      });
-    } else this.current?.engine.setClustering(null);
-    if (this.current?.provider === "native") this.current.engine.setClustering(o);
+    this.current?.engine.setClustering(o);
   }
   refreshClusters() {
     this.current?.engine.refreshClusters();

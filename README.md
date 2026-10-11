@@ -31,14 +31,13 @@ HA 내부 지도 엔진을 교체하는 방식이라 공개 API가 아닌 부분
 
 1. `dist/ha-korea-map/` 파일을 HA의 `/config/www/ha-korea-map/`에 복사합니다.
 2. `generate-provider-config.py`로 키 설정 파일을 만듭니다. 키는 저장소에 넣지 않습니다.
-3. `configuration.yaml`의 `frontend.extra_module_url`에 `/local/ha-korea-map/ha-korea-map.js?v=auto-3`를 추가하고 HA를 재시작합니다.
-4. `/map` 대시보드의 지도 카드에 `cluster: false`를 넣습니다.
+3. `configuration.yaml`의 `frontend.extra_module_url`에 `/local/ha-korea-map/ha-korea-map.js?v=auto-4`를 추가하고 HA를 재시작합니다.
 
 ## 알려진 한계
 
 - NAVER 지도는 SDK 자체가 한국 범위로 고정되어 있습니다. NAVER 지도에서 손으로 끌어서 해외로 나갈 수는 없습니다. 목적지가 정해진 이동(HA 자동 맞춤 등)은 목적지 기준으로 판정해 Google로 전환합니다.
 - SDK 로딩이나 인증이 실패하면 그 페이지에서는 원래 지도를 계속 씁니다. 새로고침하면 다시 시도합니다.
-- 마커 클러스터링은 지원하지 않습니다.
+- 그룹화(클러스터링)를 켜도 NAVER·Google 지도를 유지합니다. 다만 지금은 제공자 지도에서 그룹 아이콘을 그리지 않고 마커를 하나씩 표시합니다.
 - SDK 지도에는 HA 지도 스타일(다크 모드 등)이 적용되지 않습니다.
 - 경계는 근사치라서 대한해협, 서해 NLL, 한강 하구 근처에서는 수 km 오차가 있을 수 있습니다.
 - Google Maps Platform 약관 3.2.3(e)가 NAVER와 Google을 같은 화면에서 전환하는 이 구성에 적용되는지는 확인되지 않았습니다.

@@ -99,24 +99,34 @@ test("router SDK failure returns fresh native and late init cannot commit", asyn
   assert.equal(nativeCount, 1, "healthy native should remain");
   r.destroy();
 });
-test("router suppresses SDK fetch for clustering and safe-mode resume is explicit", async () => {
+test("grouping toggle keeps the provider map and replays the clustering setting on switch", async () => {
   const { MapRouter } = await import("../config/www/ha-map-router.mjs");
-  let count = 0;
+  const made = [];
   const r = new MapRouter({
     nativeFactory: async () => engine("native"),
-    providerFactory: () => {
-      count++;
-      return engine("google");
+    providerFactory: (name) => {
+      const e = engine(name);
+      e.clusterCalls = [];
+      e.setClustering = (o) => e.clusterCalls.push(o);
+      made.push(e);
+      return e;
     },
   });
   await r.init(container(), { center: [37, 127], zoom: 10 });
-  r.setClustering({ radius: 40 });
-  assert.equal(await r.select("google"), false);
-  assert.equal(count, 0);
+  assert.equal(await r.select("google"), true);
+  const options = { radius: 40 };
+  r.setClustering(options);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(r.diagnostics().provider, "google");
+  assert.equal(r.diagnostics().safeMode, false);
+  assert.equal(r.diagnostics().clustering, true);
+  assert.deepEqual(made[0].clusterCalls, [null, options]);
   r.setClustering(null);
-  assert.equal(await r.select("google"), false);
-  await r.resume("google");
-  assert.equal(count, 1);
+  assert.equal(r.diagnostics().clustering, false);
+  r.setClustering(options);
+  assert.equal(await r.select("naver"), true);
+  assert.equal(r.diagnostics().provider, "naver");
+  assert.deepEqual(made[1].clusterCalls, [options], "setting survives an engine switch");
   r.destroy();
 });
 test("router pending mutations replay latest circle and removed records stay removed", async () => {

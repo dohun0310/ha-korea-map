@@ -466,3 +466,24 @@ test("auto mode mounts no selector or status UI on the map", async () => {
   engine.destroy();
   ctl.uninstall();
 });
+test("HA's default grouping (cluster: true) does not block the provider map", async () => {
+  const C = fixture(),
+    ctl = installHook(C, {
+      coreVersion: "2026.10.1",
+      frontendVersion: "20260930.3",
+      mode: "official",
+      provider: "naver",
+      providers: { naver: { key: "unit-public-key", optIn: true } },
+      pathname: () => "/map/0",
+    });
+  const m = new C();
+  m.parentNode = dashboard();
+  m.clusterMarkers = true;
+  const engine = await m._createEngine();
+  assert.equal(typeof engine.select, "function");
+  const d = ctl.diagnostics().routers[0];
+  assert.equal(d.safeMode, false);
+  assert.equal(d.reason, null);
+  engine.destroy();
+  ctl.uninstall();
+});

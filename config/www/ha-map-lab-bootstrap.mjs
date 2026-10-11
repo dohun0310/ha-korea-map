@@ -1,5 +1,5 @@
-import { labConfig } from "./ha-map-lab-config.mjs?v=auto-3";
-import { startAutoHook } from "./ha-map-extension.mjs?v=auto-3";
+import { labConfig } from "./ha-map-lab-config.mjs?v=auto-4";
+import { startAutoHook } from "./ha-map-extension.mjs?v=auto-4";
 // Official SDKs remain deferred until a restricted public key and opt-in exist.
 // A cold mount may still beat hook installation; parent must verify real timing.
 if (globalThis.customElements && !globalThis.HA_MAP_LAB_HARNESS) {

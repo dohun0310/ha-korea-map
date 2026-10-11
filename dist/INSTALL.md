@@ -76,20 +76,14 @@ python3 dist/generate-provider-config.py --provider auto --opt-in \
 ```yaml
 frontend:
   extra_module_url:
-    - /local/ha-korea-map/ha-korea-map.js?v=auto-3
+    - /local/ha-korea-map/ha-korea-map.js?v=auto-4
 ```
 
 HA 를 재시작합니다. `extra_module_url` 은 재시작해야 반영됩니다.
 
 ## 5. 지도 대시보드 설정
 
-`/map` 대시보드의 지도 카드에 `cluster: false` 를 넣습니다. HA 의 마커 클러스터링은 기본값이 켜짐이고 SDK 지도에서는 지원하지 않기 때문에, 이 값이 없으면 SDK 를 불러오지 않고 원본 지도를 유지합니다.
-
-```yaml
-type: map
-cluster: false
-# entities: ...
-```
+지도 카드에는 따로 넣을 설정이 없습니다. 카드의 그룹화 버튼을 켜거나 꺼도 NAVER·Google 지도를 유지합니다. 지금은 제공자 지도에서 그룹 아이콘을 그리지 않고 마커를 하나씩 표시합니다.
 
 ## 6. 새로고침과 확인
 
@@ -102,7 +96,7 @@ cluster: false
 
 ## 파일 업데이트
 
-모듈을 바꿀 때는 `ha-korea-map.js` 안의 import 쿼리(`?v=auto-3`)와 `ha-map-extension.mjs` 의 import 쿼리를 함께 올립니다. 그러면 `extra_module_url` 을 바꾸지 않아도 되고, 재시작 없이 캐시 무시 새로고침만으로 반영됩니다. 쿼리를 올리지 않으면 이전 모듈이 캐시에 남을 수 있습니다.
+모듈을 바꿀 때는 `ha-korea-map.js` 안의 import 쿼리(`?v=auto-4`)와 `ha-map-extension.mjs` 의 import 쿼리를 함께 올립니다. 그러면 `extra_module_url` 을 바꾸지 않아도 되고, 재시작 없이 캐시 무시 새로고침만으로 반영됩니다. 쿼리를 올리지 않으면 이전 모듈이 캐시에 남을 수 있습니다.
 
 ## 롤백
 
@@ -148,5 +142,5 @@ HA 를 업데이트하면 Core·frontend 버전이나 entrypoint 해시가 바�
 - 경계는 근사치입니다. 대한해협, 서해 NLL, 한강 하구 근처에서는 수 km 오차가 있을 수 있습니다.
 - 판정은 지도 중심점 기준입니다. 경계 근처를 패닝하면 전환이 일어날 수 있습니다(디바운스와 최소 간격으로 완화).
 - NAVER 지도는 SDK 자체가 한국 범위(대략 위도 32.1~38.6, 경도 124.3~132.0)와 최소 줌 6으로 고정되어 있습니다. 그래서 NAVER 지도에서 손으로 끌어서 해외로 나갈 수는 없습니다. HA 의 자동 맞춤이나 `setView`·`panTo`·`fitBounds` 처럼 목적지가 정해진 이동은 목적지 기준으로 판정해 Google 로 전환합니다. 해외를 직접 둘러보려면 선택 칸에서 Google 을 고르세요.
-- SDK 지도에는 HA 지도 스타일(다크 모드 등)이 적용되지 않습니다. 클러스터링을 지원하지 않으며, 그래서 `cluster: false` 가 필요합니다.
+- SDK 지도에는 HA 지도 스타일(다크 모드 등)이 적용되지 않습니다. 그룹화를 켜도 제공자 지도에서는 마커를 하나씩 표시합니다.
 - 첫 마운트가 훅 설치보다 빠를 수 있습니다(콜드 로드). 그때는 원본 지도가 보이고, 다시 들어오면 적용됩니다.

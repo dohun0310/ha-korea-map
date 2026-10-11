@@ -305,3 +305,18 @@ for (const provider of ["naver", "google"])
     );
     e.destroy();
   });
+for (const provider of ["naver", "google"])
+  test(`unit ${provider}: clustering request is accepted and markers stay individually visible`, async () => {
+    const { SDKEngine } = await import("../config/www/ha-map-sdk.mjs");
+    const f = sdkFixture(provider),
+      e = new SDKEngine(provider, { key: "unit_public", optIn: true, loader: async () => f.sdk });
+    await e.init(element(), { center: [37, 127], zoom: 12, events: {} });
+    const dom = element();
+    const h = e.addMarker(dom, [37, 127], { size: [20, 20], cluster: true });
+    assert.doesNotThrow(() => e.setClustering({ radius: 40, iconBuilder() {} }));
+    assert.doesNotThrow(() => e.refreshClusters());
+    assert.ok(dom.parentNode, "marker stays on the map");
+    e.setClustering(null);
+    h.remove();
+    e.destroy();
+  });

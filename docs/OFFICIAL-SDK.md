@@ -30,16 +30,9 @@ NAVER는 NCP Maps Application의 **Dynamic Map** 사용과 Web 서비스 URL 등
 
 Google은 Maps JavaScript API 활성화, billing 설정 및 **website/HTTP referrer + API restriction**을 적용한다. 실제 접속 origin에 맞춰 제한하고 Maps JavaScript API만 허용한다. 예시 lab 주소는 `http://<HA 호스트>:18123/*`이며 콘솔 검증 규칙을 확인한다. 키는 브라우저에 공개되므로 referrer 제한 없는 키/서버 공용 키를 넣지 않는다. 과금은 provider의 실제 요금표·프로젝트 사용량에 따른다. 무료 또는 비용 상한을 보장하지 않는다. 제공자 간 전환은 새 지도 인스턴스 로드를 발생시킬 수 있어 과금이 늘 수 있다.
 
-### 클러스터링을 먼저 명시적으로 해제
+### 그룹화(클러스터링)
 
-hui-map-card의 클러스터링 설정 키는 `cluster`이며 기본값은 true이다 (frontend 20260930.3 `hui-map-card.ts`: `this._config.cluster ?? true`). `cluster_markers`는 이 버전의 map card가 읽지 않는다. 이 어댑터는 HA의 grouping/cluster icon contract를 구현하지 않으므로 **클러스터링 요청 시 기본 HA 지도만 유지하고 SDK를 로드하지 않는다**. 실제 지도 테스트에서는 `/map/0` map card에 `cluster: false`를 명시한다. 카드의 그룹화 토글 버튼으로 클러스터링을 켜면 기본 지도 안전 모드로 전환되고, 끈 뒤에는 `선택 지도 재개`로 다시 켜야 한다.
-
-```yaml
-type: map
-entities:
-  - zone.home
-cluster: false
-```
+hui-map-card의 클러스터링 설정 키는 `cluster`이고 기본값은 true이다(frontend 20260930.3 `hui-map-card.ts`: `this._config.cluster ?? true`). 라우터는 HA가 넘기는 `setClustering` 값을 저장해 현재 엔진에 전달하고, 엔진을 바꿀 때 다시 적용한다. 그룹화 버튼을 눌러도 안전 모드로 바뀌지 않고 제공자 지도를 유지한다. 지금 SDK 엔진은 그룹 아이콘을 그리지 않고 마커를 하나씩 표시한다. 상태는 `haMapExtension.diagnostics().routers[0].clustering`과 `clusterRendering`으로 확인한다.
 
 실측(2026-10-11, lab): NAVER는 `/map/0`에서 렌더링·복구·재개 확인. Google은 `ApiTargetBlockedMapError`로 인증 실패 후 기본 지도로 자동 복구됨 — 키의 API 제한에 Maps JavaScript API가 포함되지 않은 상태.
 
@@ -70,7 +63,7 @@ SDK timeout/인증 실패/첫 타일 프레임 실패는 안전 모드 native로
 - stable logical circle/path handles의 update/remove는 전환 중에도 최신 값을 보존한다. stale loader/init와 destroy/timeout은 generation 취소 및 늦은 candidate destroy로 처리한다. candidate는 commit 전 숨겨 건강한 native를 가리지 않는다. 같은 provider 재선택은 인스턴스를 재생성하지 않는다.
 - HA tile-proxy token은 native 엔진에만 전달된다. SDK 초기화 옵션은 center/zoom/controls/events만 구성한다. SDK 사용 시 선택한 제공자에는 지도 중심/viewport, 타일 요청과 브라우저 네트워크 정보가 전달되고 marker/circle/path 좌표가 해당 SDK 런타임에 들어간다. HA 인증 토큰/전체 hass/state 객체를 보내지는 않는다. SDK 내부 telemetry의 완전한 비전송은 보장하지 않는다.
 - HA MapLibre 스타일/강제 dark 테마, native popup HTML 디자인, 세부 imperative animation semantics, 임의 scale unit/국제 저줌 NAVER coverage는 provider equivalent가 아니다. 공식 기본 cartography를 유지하며 원본 logo/attribution을 숨기지 않는다.
-- 편집/drag API는 구현하지 않고 편집 화면 자체를 소유하지 않는다. 클러스터링은 native fail-close.
+- 편집/drag API는 구현하지 않고 편집 화면 자체를 소유하지 않는다. 그룹화를 켜도 제공자 지도를 유지하고, 지금은 마커를 하나씩 표시한다.
 - 국경/대한민국/독도 자동 판정 polygon은 추가하지 않았다. 정확한 영토 경계라 주장하는 사각형/샘플 polygon을 넣지 않는다. 향후 자동 국가 선택은 licensed public boundary 또는 사용자가 검증한 local GeoJSON과 근거를 별도 추가한다. 현재는 명시적 제공자 선택/전환이다.
 
 ## 롤백
