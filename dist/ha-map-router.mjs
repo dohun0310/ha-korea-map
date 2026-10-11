@@ -166,7 +166,6 @@ export class MapRouter {
     } finally {
       clearTimeout(timer);
       this.pending.delete(candidate);
-      this.onStatus?.();
     }
   }
   cancelPending() {

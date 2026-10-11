@@ -108,6 +108,13 @@ export function loadOfficialSDK(
   loads.set(provider, { key, promise });
   return promise;
 }
+// Tooltip HTML to plain text. A <template> parses inertly: no image loads or event
+// handlers run, unlike innerHTML on a live element.
+function htmlToText(document, html) {
+  const template = document.createElement("template");
+  template.innerHTML = String(html ?? "");
+  return ((template.content ?? template).textContent || "").trim();
+}
 export class SDKEngine {
   constructor(provider, config = {}) {
     if (!["naver", "google"].includes(provider)) throw new Error("provider-unknown");
@@ -162,9 +169,7 @@ export class SDKEngine {
       const p = this.provider === "naver" ? ev.coord : ev.latLng;
       if (p) options.events?.click?.([p.lat(), p.lng()]);
     });
-    this.listen(this.provider === "naver" ? "zoom_changed" : "zoom_changed", () =>
-      options.events?.zoomStart?.(),
-    );
+    this.listen("zoom_changed", () => options.events?.zoomStart?.());
     this.listen("dragstart", () => options.events?.moveStart?.());
     // A script load isn't proof of geography: wait for SDK tilesloaded event.
     await new Promise((resolve, reject) => {
@@ -210,6 +215,12 @@ export class SDKEngine {
     const h = this.event.addListener(this.map, name, fn);
     this.listeners.push(h);
     return h;
+  }
+  unlisten(h) {
+    if (!h) return;
+    this.event.removeListener(h);
+    const index = this.listeners.indexOf(h);
+    if (index !== -1) this.listeners.splice(index, 1);
   }
   tracked(handle) {
     this.items.add(handle);
@@ -348,9 +359,7 @@ export class SDKEngine {
           background: p.color,
           opacity: String(marker.opacity ?? 1),
         });
-        const tip = this.container.ownerDocument.createElement("div");
-        tip.innerHTML = marker.tooltipHtml;
-        dot.setAttribute("title", tip.textContent || "");
+        dot.setAttribute("title", htmlToText(this.container.ownerDocument, marker.tooltipHtml));
         children.push(
           this.addMarker(dot, marker.location, {
             size: [8, 8],
@@ -392,11 +401,6 @@ export class SDKEngine {
   }
   fitBounds(points, o = {}) {
     if (!points.length) return;
-    if (points.length === 1) {
-      this.setView(points[0], o.maxZoom);
-      return;
-    }
-    const b = new this.sdk.LatLngBounds();
     let south = 90,
       north = -90,
       west = 180,
@@ -407,9 +411,16 @@ export class SDKEngine {
       west = Math.min(west, l);
       east = Math.max(east, l);
     }
-    const pad = o.pad ?? 0,
-      dy = ((north - south) * pad) / 2,
-      dx = ((east - west) * pad) / 2;
+    // Zero-area bounds (one point, or all points equal): centre on it like the native engines.
+    if (south === north && west === east) {
+      this.setView([south, west], o.maxZoom);
+      return;
+    }
+    // Same padding rule as HA's MapLibre/Leaflet engines: each side grows by pad (default 0.5).
+    const pad = o.pad ?? 0.5,
+      dy = (north - south) * pad,
+      dx = (east - west) * pad;
+    const b = new this.sdk.LatLngBounds();
     b.extend(this.coord([Math.max(-85, south - dy), west - dx]));
     b.extend(this.coord([Math.min(85, north + dy), east + dx]));
     this.map.fitBounds(
@@ -421,11 +432,13 @@ export class SDKEngine {
         if (this.map && this.map.getZoom() > o.maxZoom) this.map.setZoom(o.maxZoom);
       };
       cap();
-      const h = this.event.addListener(this.map, "idle", () => {
-        this.event.removeListener(h);
+      // One pending cap at a time; a newer fit replaces the older one.
+      this.unlisten(this.fitCap);
+      this.fitCap = this.listen("idle", () => {
+        this.unlisten(this.fitCap);
+        this.fitCap = undefined;
         cap();
       });
-      this.listeners.push(h);
     }
   }
   hasUsableSize() {
@@ -455,12 +468,13 @@ export class SDKEngine {
     this.config.onRestyle?.();
   }
   setZoomControlPosition() {
-    /* Zoom buttons are intentionally hidden on provider maps. */ this.map?.setOptions({
+    // Zoom buttons stay hidden on provider maps even when HA asks for a position.
+    this.map?.setOptions({
       zoomControl: false,
     });
   }
   setScaleRuler(o) {
-    this.map?.setOptions(this.provider === "naver" ? { scaleControl: !!o } : { scaleControl: !!o });
+    this.map?.setOptions({ scaleControl: !!o });
   }
   // Grouping is accepted but not drawn yet: every marker stays individually visible.
   setClustering(o) {

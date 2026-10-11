@@ -131,9 +131,6 @@ export class AutoSwitch {
     if (this.timer != null) this.timers.clearTimeout(this.timer);
     this.timer = null;
   }
-  status() {
-    this.router.onStatus?.();
-  }
   async start() {
     if (this.poll && this.timers.setInterval)
       this.interval = this.timers.setInterval(() => this.pollView(), this.poll);
@@ -145,13 +142,11 @@ export class AutoSwitch {
       this.enabled = false;
       this.state = "boundary-unavailable";
       this.disabledReason = "boundary-unavailable";
-      this.status();
       return;
     }
     if (this.dead) return;
     this.geometry = geometry;
     this.state = "ready";
-    this.status();
     if (this.enabled) await this.evaluate({ immediate: true });
   }
   enable() {
@@ -159,7 +154,6 @@ export class AutoSwitch {
     this.enabled = true;
     this.disabledReason = null;
     this.router.desired = "auto";
-    this.status();
     return this.evaluate({ immediate: true }).then(() => true);
   }
   disable(reason = "manual") {
@@ -168,7 +162,6 @@ export class AutoSwitch {
     this.fit = null;
     this.cancelTimer();
     if (reason === "manual") this.router.desired = undefined;
-    this.status();
   }
   camera(kind, info = {}) {
     if (this.dead || !this.enabled || !this.geometry) return;
@@ -272,13 +265,11 @@ export class AutoSwitch {
     this.decisionReason = d.reason;
     this.lastKey = viewKey(r.getView?.());
     if (r.current?.provider === d.target) {
-      this.status();
       return;
     }
     const wait = this.lastSwitch + this.minInterval - this.now();
     if (!immediate && wait > 0) {
       this.later(() => void this.evaluate(), wait);
-      this.status();
       return;
     }
     this.running = true;
@@ -299,7 +290,6 @@ export class AutoSwitch {
         this.dirty = false;
         this.schedule();
       }
-      this.status();
     }
   }
   diagnostics() {
