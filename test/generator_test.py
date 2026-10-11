@@ -52,3 +52,20 @@ class StyleIdTests(unittest.TestCase):
             text = out.read_text()
             cfg = json.loads(text[text.index('(') + 1:text.rindex(')')])
             self.assertNotIn('styleIds', cfg['providers']['naver'])
+
+
+class BoundaryDefaultTests(unittest.TestCase):
+    def test_auto_without_boundary_url_leaves_it_to_the_entry_module(self):
+        script = ROOT / 'generate-provider-config.py'
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as d:
+            d = pathlib.Path(d)
+            keys = d / 'provider-keys.env'
+            out = d / 'config.mjs'
+            keys.write_text('NAVER_MAP_KEY_ID=unit_public_naver\nGOOGLE_MAPS_API_KEY=unit_public_google\n')
+            keys.chmod(0o600)
+            p = subprocess.run(['python3', str(script), '--keys', str(keys), '--output', str(out),
+                                '--provider', 'auto', '--opt-in'], capture_output=True, text=True)
+            self.assertEqual(p.returncode, 0, p.stderr)
+            text = out.read_text()
+            cfg = json.loads(text[text.index('(') + 1:text.rindex(')')])
+            self.assertNotIn('boundary', cfg)

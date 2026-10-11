@@ -27,11 +27,11 @@ HA 내부 지도 엔진을 교체하는 방식이라 공개 API가 아닌 부분
 
 ## 설치
 
-[dist/INSTALL.md](dist/INSTALL.md)를 따라 설치합니다. 요약하면 다음과 같습니다.
+[docs/INSTALL.md](docs/INSTALL.md)를 따라 설치합니다. 요약하면 다음과 같습니다.
 
-1. `dist/ha-korea-map/` 파일을 HA의 `/config/www/ha-korea-map/`에 복사합니다.
-2. `generate-provider-config.py`로 키 설정 파일을 만듭니다. 키는 저장소에 넣지 않습니다.
-3. `configuration.yaml`의 `frontend.extra_module_url`에 `/local/ha-korea-map/ha-korea-map.js?v=auto-4`를 추가하고 HA를 재시작합니다.
+1. HACS에 이 저장소를 Dashboard 유형의 사용자 지정 저장소로 추가하고 내려받습니다. HACS를 쓰지 않는다면 `dist/` 파일을 HA의 `/config/www/ha-korea-map/`에 복사합니다.
+2. `generate-provider-config.py`로 키 설정 파일 `/config/www/ha-korea-map-config.mjs`를 만듭니다. 키는 저장소에 넣지 않습니다.
+3. `configuration.yaml`의 `frontend.extra_module_url`에 `/hacsfiles/ha-korea-map/ha-korea-map.js?v=auto-4`(직접 복사했다면 `/local/ha-korea-map/ha-korea-map.js?v=auto-4`)를 추가하고 HA를 재시작합니다.
 
 ## 알려진 한계
 
@@ -62,4 +62,4 @@ OPENBLAS_NUM_THREADS=1 prlimit --as=2500000000 -- .venv/bin/python tools/build_k
 
 ## 데이터 출처
 
-경계 데이터는 geoBoundaries와 Natural Earth를 가공했습니다. 북한(CC BY 3.0 IGO)과 일본(CC BY 4.0) 데이터는 출처 표기가 필요합니다. 표기 문구는 [dist/ha-korea-map/ATTRIBUTION.md](dist/ha-korea-map/ATTRIBUTION.md)에 있습니다.
+경계 데이터는 geoBoundaries와 Natural Earth를 가공했습니다. 북한(CC BY 3.0 IGO)과 일본(CC BY 4.0) 데이터는 출처 표기가 필요합니다. 표기 문구는 [dist/ATTRIBUTION.md](dist/ATTRIBUTION.md)에 있습니다.

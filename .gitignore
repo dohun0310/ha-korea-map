@@ -3,7 +3,7 @@ provider-keys.env
 *.env
 !provider-keys.env.example
 config/www/ha-map-lab-config.mjs
-dist/ha-korea-map/ha-map-config.mjs
+ha-korea-map-config.mjs
 
 # 테스트용 HA 컨테이너가 만드는 상태 파일
 config/.storage/

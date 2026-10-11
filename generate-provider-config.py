@@ -21,7 +21,7 @@ def read_keys(path):
    result[name]=value
  return result
 def main():
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('--provider',choices=['native','naver','google','auto'],default='native',help='auto: Korea boundary => naver, otherwise google (needs both keys)');p.add_argument('--boundary-url',default='/local/ha-map-korea-boundary.geojson',help='same-origin URL of the boundary GeoJSON (auto only)');p.add_argument('--boundary-file',type=pathlib.Path,default=ROOT/'config/www/ha-map-korea-boundary.geojson',help='local copy used for the cache-busting hash');p.add_argument('--opt-in',action='store_true',help='consent to SDK location requests and potential billing');p.add_argument('--allow-switching',action='store_true',help='explicitly enable both providers (terms unresolved; isolated private lab only)');p.add_argument('--keys',type=pathlib.Path,default=ROOT/'provider-keys.env');p.add_argument('--naver-style-light',help='optional NAVER Style Editor style id for light mode (needs the GL submodule)');p.add_argument('--naver-style-dark',help='optional NAVER Style Editor style id for dark mode (needs the GL submodule)');p.add_argument('--output',type=pathlib.Path,default=ROOT/'config/www/ha-map-lab-config.mjs');a=p.parse_args()
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('--provider',choices=['native','naver','google','auto'],default='native',help='auto: Korea boundary => naver, otherwise google (needs both keys)');p.add_argument('--boundary-url',help='same-origin URL of the boundary GeoJSON (auto only). Omit for the production entry, which uses the copy next to ha-korea-map.js; the lab bootstrap needs /local/ha-map-korea-boundary.geojson');p.add_argument('--boundary-file',type=pathlib.Path,default=ROOT/'config/www/ha-map-korea-boundary.geojson',help='local copy used for the cache-busting hash');p.add_argument('--opt-in',action='store_true',help='consent to SDK location requests and potential billing');p.add_argument('--allow-switching',action='store_true',help='explicitly enable both providers (terms unresolved; isolated private lab only)');p.add_argument('--keys',type=pathlib.Path,default=ROOT/'provider-keys.env');p.add_argument('--naver-style-light',help='optional NAVER Style Editor style id for light mode (needs the GL submodule)');p.add_argument('--naver-style-dark',help='optional NAVER Style Editor style id for dark mode (needs the GL submodule)');p.add_argument('--output',type=pathlib.Path,default=ROOT/'config/www/ha-map-lab-config.mjs');a=p.parse_args()
  try:
   providers={}
   if a.provider!='native':
@@ -36,7 +36,7 @@ def main():
    if not re.fullmatch(r'[A-Za-z0-9_-]{4,128}',value):raise ValueError('invalid-style-id')
   if styles and 'naver' in providers:providers['naver']['styleIds']=styles
   cfg={'mode':'native' if a.provider=='native' else 'official','provider':a.provider,'providers':providers,'pin':PIN}
-  if a.provider=='auto':
+  if a.provider=='auto' and a.boundary_url:
    if not re.fullmatch(r'/[A-Za-z0-9_./-]+\.geojson',a.boundary_url):raise ValueError('invalid-boundary-url')
    if not a.boundary_file.is_file():raise ValueError('boundary-file-missing')
    cfg['boundary']={'url':a.boundary_url+'?v='+hashlib.sha256(a.boundary_file.read_bytes()).hexdigest()[:12]}
