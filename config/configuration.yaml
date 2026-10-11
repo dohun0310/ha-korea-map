@@ -1,0 +1,12 @@
+homeassistant:
+  name: Isolated Map Lab
+  latitude: 37.5665
+  longitude: 126.9780
+  elevation: 0
+  unit_system: metric
+  time_zone: Asia/Seoul
+frontend:
+  extra_module_url:
+    - /local/ha-map-lab-bootstrap.mjs?v=dashboard-2
+http:
+map:
